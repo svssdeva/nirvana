@@ -8,6 +8,7 @@ import {
   getDonationInfo,
   getSettings,
   ping,
+  resetDatabase,
   seedDummyGames,
   setSetting,
   toAppError,
@@ -209,6 +210,16 @@ export class SettingsView extends LitElement {
     .pill:active {
       background: var(--primary-pressed, #0064b7);
     }
+    .panel.danger {
+      border-color: var(--danger);
+    }
+    .danger-btn {
+      background: var(--danger);
+      color: #fff;
+    }
+    .danger-btn:active {
+      filter: brightness(0.92);
+    }
     /* QR sits on white in both themes so any UPI app can scan it. */
     .qr {
       width: 200px;
@@ -300,6 +311,9 @@ export class SettingsView extends LitElement {
   @state() private newFolder = "";
   @state() private version = "";
   @state() private seedMsg = "";
+  @state() private confirmReset = false;
+  @state() private resetMsg = "";
+  #resetTimer?: ReturnType<typeof setTimeout>;
   /** Vite sets this only in `tauri dev` builds. */
   private readonly isDev = import.meta.env.DEV;
 
@@ -321,6 +335,7 @@ export class SettingsView extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearTimeout(this.#copiedTimer);
+    clearTimeout(this.#resetTimer);
     this.#storeUnsub?.();
   }
 
@@ -394,6 +409,42 @@ export class SettingsView extends LitElement {
     `;
   }
 
+  private renderDanger() {
+    return html`
+      <section class="panel danger" aria-labelledby="danger-h">
+        <h2 id="danger-h">Delete database</h2>
+        <p>
+          Clears all discovered games, tags, favorites, custom covers, and saved
+          settings (watch folders, preferences). Your actual game files are never
+          touched. This can't be undone.
+        </p>
+        <button class="pill danger-btn" @click=${this.resetDb}>
+          ${this.confirmReset ? "Click again to confirm" : "Delete database"}
+        </button>
+        ${this.resetMsg ? html`<p class="result ok" role="status">${this.resetMsg}</p>` : nothing}
+      </section>
+    `;
+  }
+
+  private async resetDb(): Promise<void> {
+    // Two-step confirm: first click arms, second (within 4s) commits.
+    if (!this.confirmReset) {
+      this.confirmReset = true;
+      clearTimeout(this.#resetTimer);
+      this.#resetTimer = setTimeout(() => (this.confirmReset = false), 4000);
+      return;
+    }
+    clearTimeout(this.#resetTimer);
+    this.confirmReset = false;
+    try {
+      await resetDatabase();
+      this.settings = await getSettings(); // reflect wiped settings
+      this.resetMsg = "Database cleared. Open the Library tab and rescan.";
+    } catch (e) {
+      this.resetMsg = `Failed: ${toAppError(e).message}`;
+    }
+  }
+
   private async seed(): Promise<void> {
     try {
       const n = await seedDummyGames();
@@ -441,6 +492,7 @@ export class SettingsView extends LitElement {
       <view-page heading="Settings" tagline="Preferences, support, and diagnostics.">
         <div class="panels">
           ${this.renderPreferences()} ${this.renderAbout()} ${this.renderSupport()}
+          ${this.renderDanger()}
           ${this.isDev
             ? html`<div class="panel">
                   <h2>IPC diagnostics</h2>

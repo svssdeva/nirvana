@@ -180,6 +180,11 @@ export function setTags(id: number, tags: string[]): Promise<void> {
   return call<void>("set_tags", { id, tags });
 }
 
+/** Wipe the entire local database (games, tags, settings). Destructive. */
+export function resetDatabase(): Promise<void> {
+  return call<void>("reset_database");
+}
+
 /**
  * Pick a local image (native dialog) as a game's custom cover; copies it into the
  * app cache and persists it. Resolves to the new cover path, or null if cancelled.

@@ -219,6 +219,16 @@ impl Db {
         Ok(())
     }
 
+    /// Wipe the whole library: all games, tags, and settings. The schema (and
+    /// `user_version`) is kept, so the DB is immediately reusable — equivalent to
+    /// a fresh database. Used by the Settings "delete database" action.
+    pub fn reset(&self) -> CoreResult<()> {
+        // game_tag rows cascade from the game/tag deletes (FK ON DELETE CASCADE).
+        self.conn
+            .execute_batch("DELETE FROM game; DELETE FROM tag; DELETE FROM setting;")?;
+        Ok(())
+    }
+
     /// Remove games of `source` whose id is **not** in `keep_ids` — the rows a
     /// fresh scan of that source no longer reports (uninstalled games, or
     /// previously mis-detected non-game apps). Tags/junctions cascade. Returns the
@@ -458,6 +468,26 @@ mod tests {
         let again = db.get_game(id).unwrap().unwrap();
         assert_eq!(again.last_played, Some(1_700_000_100));
         assert_eq!(again.launch_count, 2);
+    }
+
+    #[test]
+    fn reset_wipes_games_tags_and_settings_keeping_schema() {
+        let db = Db::open_in_memory().unwrap();
+        let id = db
+            .upsert_game(&sample_game("Hades", r"C:\g\hades"))
+            .unwrap();
+        db.set_tags(id, &["Roguelike".into()]).unwrap();
+        db.set_setting("watchFolders", r#"["D:\\Games"]"#).unwrap();
+
+        db.reset().unwrap();
+
+        assert!(db.list_games().unwrap().is_empty());
+        assert_eq!(db.get_setting("watchFolders").unwrap(), None);
+        assert_eq!(db.version().unwrap(), SCHEMA_VERSION, "schema kept");
+        // DB still usable after reset.
+        assert!(db
+            .upsert_game(&sample_game("Celeste", r"C:\g\celeste"))
+            .is_ok());
     }
 
     #[test]

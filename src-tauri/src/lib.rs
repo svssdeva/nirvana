@@ -59,7 +59,8 @@ pub fn run() {
             commands::seed_dummy_games,
             commands::get_system_info,
             commands::set_cover,
-            commands::open_task_manager
+            commands::open_task_manager,
+            commands::reset_database
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

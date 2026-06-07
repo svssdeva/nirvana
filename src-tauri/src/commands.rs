@@ -103,6 +103,15 @@ pub fn get_library(
     Ok(library::apply_query(games, &query.unwrap_or_default()))
 }
 
+/// Wipe the entire local database (games, tags, settings) — the Settings
+/// "delete database" action. Destructive; the UI confirms first.
+#[tauri::command]
+pub fn reset_database(state: State<'_, AppState>) -> CommandResult<()> {
+    let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+    db.reset()?;
+    Ok(())
+}
+
 /// Toggle a game's favorite flag (persisted).
 #[tauri::command]
 pub fn set_favorite(state: State<'_, AppState>, id: i64, favorite: bool) -> CommandResult<()> {

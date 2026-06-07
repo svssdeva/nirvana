@@ -278,23 +278,36 @@ export class LibraryView extends LitElement {
   }
 
   private async listenForProgress(): Promise<void> {
-    const unlisten = await subscribe("scan://progress", (event) => {
-      const { source, found } = event.payload;
-      this.progress = new Map(this.progress).set(source, found);
-    });
-    // Guard the connect/disconnect race: if we already detached, tear down now.
-    if (this.isConnected) this.#unlisteners.push(unlisten);
-    else unlisten();
+    try {
+      const unlisten = await subscribe("scan://progress", (event) => {
+        const { source, found } = event.payload;
+        this.progress = new Map(this.progress).set(source, found);
+      });
+      // Guard the connect/disconnect race: if we already detached, tear down now.
+      if (this.isConnected) this.#unlisteners.push(unlisten);
+      else unlisten();
+    } catch {
+      // Event bus not ready yet (cold start) — progress counts just won't show;
+      // swallow so it isn't an unhandled rejection. Scanning still works.
+    }
   }
 
-  /** Load the persisted library with the current query (no scan). */
-  private async refresh(): Promise<void> {
+  /**
+   * Load the persisted library with the current query (no scan). Retries once on
+   * a transient failure (e.g. the IPC bridge not ready on a cold start) before
+   * surfacing an error, so a fresh launch doesn't flash a scary message.
+   */
+  private async refresh(retry = true): Promise<void> {
     if (this.status !== "scanning") this.status = "loading";
     try {
       this.games = await getLibrary(this.query);
       this.mergeKnownTags();
       if (this.status !== "scanning") this.status = "idle";
     } catch (e) {
+      if (retry) {
+        await new Promise((r) => setTimeout(r, 300));
+        return this.refresh(false);
+      }
       this.error = toAppError(e);
       this.status = "error";
     }
