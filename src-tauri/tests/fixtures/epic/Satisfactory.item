@@ -1,0 +1,12 @@
+{
+	"FormatVersion": 0,
+	"bIsIncompleteInstall": false,
+	"AppName": "CrabEmoji",
+	"CatalogItemId": "sat999catalog",
+	"CatalogNamespace": "crab",
+	"DisplayName": "Satisfactory",
+	"InstallLocation": "D:\\Epic\\Satisfactory",
+	"LaunchExecutable": "FactoryGame/Binaries/Win64/FactoryGame-Win64-Shipping.exe",
+	"InstallSize": 53687091200,
+	"InstallationGuid": "{66666666-7777-8888-9999-000000000000}"
+}

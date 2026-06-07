@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Least-privilege capability for the main window (threat-model TB2): core:default only, plus opener for official store-protocol launches + open-install-folder (TB3), and window show/close so the painted UI can reveal itself and dismiss the splashscreen window. No fs/shell permissions are exposed to JS — all privileged work (spawn, registry, disk walk) stays in Rust commands.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-close",
+    "opener:default"
+  ]
+}

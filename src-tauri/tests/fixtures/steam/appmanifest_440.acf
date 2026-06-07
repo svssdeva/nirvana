@@ -1,0 +1,44 @@
+"AppState"
+{
+	"appid"		"440"
+	"Universe"		"1"
+	"LauncherPath"		"C:\\Program Files (x86)\\Steam\\steam.exe"
+	"name"		"Team Fortress 2"
+	"StateFlags"		"4"
+	"installdir"		"Team Fortress 2"
+	"LastUpdated"		"1716950400"
+	"SizeOnDisk"		"24305820742"
+	"StagingSize"		"0"
+	"buildid"		"14000000"
+	"LastOwner"		"76561198000000000"
+	"UpdateResult"		"0"
+	"BytesToDownload"		"0"
+	"BytesDownloaded"		"0"
+	"BytesToStage"		"0"
+	"BytesStaged"		"0"
+	"TargetBuildID"		"14000000"
+	"AutoUpdateBehavior"		"0"
+	"AllowOtherDownloadsWhileRunning"		"0"
+	"ScheduledAutoUpdate"		"0"
+	"InstalledDepots"
+	{
+		"441"
+		{
+			"manifest"		"7138463484950305931"
+			"size"		"12000000000"
+		}
+		"232251"
+		{
+			"manifest"		"1234567890123456789"
+			"size"		"12305820742"
+		}
+	}
+	"UserConfig"
+	{
+		"language"		"english"
+	}
+	"MountedConfig"
+	{
+		"language"		"english"
+	}
+}

@@ -1,0 +1,96 @@
+[package]
+name = "nirvana"
+version = "0.1.0-alpha.1"
+description = "Nirvana — offline unified game launcher for Windows (Steam/Epic/local)"
+authors = ["svssdeva"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "nirvana_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# Smaller release binary (alpha distribution). NOTE: no `panic = "abort"` — the
+# scan orchestrator relies on unwinding to recover a panicked scoped scanner
+# thread (one source failing must not abort the others). opt-level "z" + fat LTO
+# + one codegen unit + symbol stripping trade a little build time for size.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+
+[features]
+default = []
+# Opt-in SteamGridDB cover art (ADR-0002): the ONLY network feature, OFF by
+# default. Pulls in reqwest (HTTPS) + keyring (API key in the OS vault). The
+# default build compiles both out — assert with `cargo tree`.
+steamgriddb = ["dep:reqwest", "dep:keyring"]
+
+[dependencies]
+# protocol-asset: lets the WebView load cover-art files via `convertFileSrc`
+# under the restrictive CSP (scope is granted at runtime, least-privilege).
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-opener = "2"
+# Native file picker for choosing a custom cover image (offline). Used via its
+# Rust API from a command, so no JS capability is exposed.
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+rusqlite = { version = "0.40.1", features = ["bundled"] }
+# VDF (Valve KeyValues) — typed deserialization for Steam manifests (ADR-0003).
+# keyvalues-serde wraps keyvalues-parser; both maintained (v0.2.x, 2026-05).
+keyvalues-serde = "0.2"
+# Structured logging facade + a fmt subscriber (RUST_LOG-driven). Used to record
+# skipped sources/rows during a scan without aborting it (Task 8 orchestration).
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Image encoding for extracted exe icons → PNG (FR-ART). PNG-only to stay lean;
+# we never decode attacker-influenced images in Rust (the WebView renders covers).
+image = { version = "0.25", default-features = false, features = ["png"] }
+# Offline UPI donation QR (rendered to inline SVG — no image dep, no network).
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+# Drive capacity (M2 disk) + system metrics later (M3 monitor). Cross-platform.
+sysinfo = "0.33"
+# Sampler interval timer (M3 monitor). Tauri's async runtime is tokio; we only
+# need the time driver here.
+tokio = { version = "1", features = ["time"] }
+
+# ── Optional, behind the `steamgriddb` feature only (OFF by default) ──────────
+# HTTPS via rustls (no OpenSSL); blocking client (called from a sync command).
+reqwest = { version = "0.12", optional = true, default-features = false, features = [
+    "blocking",
+    "rustls-tls",
+    "json",
+] }
+# API key in the OS credential vault (never in DB/logs/commits — threat-model TB6).
+keyring = { version = "3", optional = true, features = ["windows-native"] }
+
+# OS access (ADR-0005 trait seams). Windows-only deps live here.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+# Win32 FFI for exe-icon extraction (Shell + GDI), confined to the os/ seam
+# (threat-model: unsafe lives only here). Pin + review before bumping.
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Performance",
+    "Win32_Graphics_Dxgi",
+] }
+# Safe WMI wrapper for GPU model/driver (Win32_VideoController) — FR-GPU Task 16.
+wmi = "0.14"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+

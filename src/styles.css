@@ -1,0 +1,118 @@
+/* Global base + design tokens (PlayStation-style system, see docs/design.md).
+   Component-specific styling lives inside each Lit element's `static styles`.
+
+   Two layers:
+   1. Raw palette — the literal design.md hex values (never themed).
+   2. Semantic role tokens (--bg, --surface, --on-surface, …) — what components
+      actually reference. They remap between the system's two surface modes:
+      "dark canvas mode" (default) and "light canvas mode" (design.md §Overview).
+   Theme is selected via `data-theme` on <html>; see src/theme.ts. Custom
+   properties pierce shadow boundaries, so defining them on :root themes every
+   Lit component at once. */
+:root {
+  /* ── Raw palette (design.md §Colors) ─────────────────────────────────── */
+  /* Surface */
+  --canvas-dark: #000000;
+  --canvas-light: #ffffff;
+  --surface-dark-elevated: #121314;
+  --surface-dark-card: #181818;
+  --surface-soft: #f3f3f3;
+  --surface-card: #f5f7fa;
+  /* Brand */
+  --primary: #0070d1;
+  --primary-pressed: #0064b7;
+  --primary-active: #004d8d;
+  --on-primary: #ffffff;
+  --commerce: #d53b00;
+  /* Text */
+  --on-dark: #ffffff;
+  --on-dark-mute: #cccccc;
+  --body-dark: rgba(255, 255, 255, 0.7);
+  --mute-dark: rgba(229, 229, 229, 0.55);
+  --ink: #000000;
+  --body-light: rgba(0, 0, 0, 0.6);
+  --mute-light: #6b6b6b;
+  --ash-light: #cccccc;
+  /* Lines */
+  --hairline-dark: rgba(229, 229, 229, 0.2);
+  --hairline-light: #f3f3f3;
+  /* Semantic */
+  --warning: #c81b3a;
+
+  /* Radii (design.md §Shapes) */
+  --rounded-sm: 4px;
+  --rounded-md: 8px;
+  --rounded-lg: 16px;
+  --rounded-full: 9999px;
+
+  /* Type faces — PlayStation SST is proprietary; design.md prescribes Roboto
+     Light (300) for display + Inter for chrome/body. We do NOT load web fonts
+     (offline hard constraint — zero network in the default build), so each
+     stack falls back to Windows' Segoe UI / system-ui. Bundling the woff2 cuts
+     is deferred polish. */
+  --font-display: "Roboto", "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
+
+  /* ── Semantic role tokens — DARK canvas mode (default) ───────────────── */
+  --bg: var(--canvas-dark);
+  --surface: var(--surface-dark-card);
+  --surface-elevated: var(--surface-dark-elevated);
+  --on-surface: var(--on-dark);
+  --on-surface-muted: var(--body-dark);
+  --hairline: var(--hairline-dark);
+  --danger: #ff6b6b;
+}
+
+/* ── Semantic role tokens — LIGHT canvas mode ──────────────────────────── */
+:root[data-theme="light"] {
+  --bg: var(--canvas-light);
+  --surface: var(--surface-card);
+  --surface-elevated: var(--surface-soft);
+  --on-surface: var(--ink);
+  --on-surface-muted: var(--body-light);
+  --hairline: var(--hairline-light);
+  --danger: var(--warning);
+}
+
+:root {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--on-surface);
+  background-color: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--on-surface);
+  /* Soften the band/surface swap when toggling modes. */
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* Smooth cross-fade between top-level views (app-root wraps view switches in
+   document.startViewTransition). Tune the default root animation; the WebView
+   degrades to an instant swap where the API is unavailable. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 220ms;
+    animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+}

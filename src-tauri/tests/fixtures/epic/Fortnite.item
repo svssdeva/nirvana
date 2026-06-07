@@ -1,0 +1,12 @@
+{
+	"FormatVersion": 0,
+	"bIsIncompleteInstall": false,
+	"AppName": "Fortnite",
+	"CatalogItemId": "fn1234567890abcdef",
+	"CatalogNamespace": "fn",
+	"DisplayName": "Fortnite",
+	"InstallLocation": "C:\\Program Files\\Epic Games\\Fortnite",
+	"LaunchExecutable": "FortniteGame/Binaries/Win64/FortniteClient-Win64-Shipping.exe",
+	"InstallSize": 26843545600,
+	"InstallationGuid": "{11111111-2222-3333-4444-555555555555}"
+}

@@ -1,0 +1,19 @@
+"AppState"
+{
+	"appid"		"570"
+	"Universe"		"1"
+	"name"		"Dota 2"
+	"StateFlags"		"4"
+	"installdir"		"dota 2 beta"
+	"LastUpdated"		"1716000000"
+	"SizeOnDisk"		"17773670227"
+	"buildid"		"13900000"
+	"InstalledDepots"
+	{
+		"571"
+		{
+			"manifest"		"9999999999999999999"
+			"size"		"17773670227"
+		}
+	}
+}
