@@ -15,6 +15,7 @@
 //! individual row that fails to persist is skipped, not fatal.
 
 pub mod epic;
+pub mod gog;
 pub mod local;
 pub mod steam;
 pub mod store;
