@@ -6,7 +6,7 @@
 use crate::art::{self, CoverRef};
 use crate::error::{AppError, CoreError, CoreResult};
 use crate::library::{self, LibraryQuery};
-use crate::models::{Drive, Game, Gpu, Source};
+use crate::models::{Collection, Drive, Game, Gpu, Source};
 use crate::scan::{ScanDone, ScanEvents, ScanProgress};
 use crate::state::AppState;
 use crate::{disk, launch, monitor, scan};
@@ -133,6 +133,53 @@ fn source_infos() -> Vec<SourceInfo> {
             color: d.color.to_string(),
         })
         .collect()
+}
+
+/// List user collections.
+#[tauri::command]
+pub fn list_collections(state: State<'_, AppState>) -> CommandResult<Vec<Collection>> {
+    let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+    Ok(db.list_collections()?)
+}
+
+/// Create a collection; returns its id. Blank/duplicate names error.
+#[tauri::command]
+pub fn create_collection(state: State<'_, AppState>, name: String) -> CommandResult<i64> {
+    let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+    Ok(db.create_collection(&name)?)
+}
+
+#[tauri::command]
+pub fn rename_collection(state: State<'_, AppState>, id: i64, name: String) -> CommandResult<()> {
+    let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+    db.rename_collection(id, &name)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_collection(state: State<'_, AppState>, id: i64) -> CommandResult<()> {
+    let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+    db.delete_collection(id)?;
+    Ok(())
+}
+
+/// Replace a game's collection memberships.
+#[tauri::command]
+pub fn set_game_collections(
+    state: State<'_, AppState>,
+    game_id: i64,
+    collection_ids: Vec<i64>,
+) -> CommandResult<()> {
+    let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+    db.set_game_collections(game_id, &collection_ids)?;
+    Ok(())
+}
+
+/// Collection ids a game belongs to (to tick the context-menu submenu).
+#[tauri::command]
+pub fn game_collections(state: State<'_, AppState>, game_id: i64) -> CommandResult<Vec<i64>> {
+    let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+    Ok(db.game_collections(game_id)?)
 }
 
 /// List every known store with its display name and brand color. Static (no

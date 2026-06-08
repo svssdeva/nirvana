@@ -68,6 +68,12 @@ export interface Game {
   tags: string[];
 }
 
+/** A user-defined game collection (mirrors models.rs `Collection`). */
+export interface Collection {
+  id: number;
+  name: string;
+}
+
 /** Library filter/sort/search request (mirrors library.rs `LibraryQuery`). */
 export type SortBy = "name" | "size" | "lastPlayed";
 export interface LibraryQuery {
@@ -76,6 +82,7 @@ export interface LibraryQuery {
   drive?: string;
   favoritesOnly?: boolean;
   tag?: string;
+  collection?: number;
   sort?: SortBy;
   descending?: boolean;
 }
@@ -346,6 +353,38 @@ export function getCover(id: number): Promise<CoverRef> {
  */
 export function coverSrc(path: string): string {
   return convertFileSrc(path);
+}
+
+// ── Collections ─────────────────────────────────────────────────────────────
+
+/** List all user collections. */
+export function listCollections(): Promise<Collection[]> {
+  return call<Collection[]>("list_collections");
+}
+
+/** Create a collection; resolves to its new id. Blank/duplicate names error. */
+export function createCollection(name: string): Promise<number> {
+  return call<number>("create_collection", { name });
+}
+
+/** Rename a collection. */
+export function renameCollection(id: number, name: string): Promise<void> {
+  return call<void>("rename_collection", { id, name });
+}
+
+/** Delete a collection (and its memberships). */
+export function deleteCollection(id: number): Promise<void> {
+  return call<void>("delete_collection", { id });
+}
+
+/** Replace a game's collection memberships. */
+export function setGameCollections(gameId: number, collectionIds: number[]): Promise<void> {
+  return call<void>("set_game_collections", { gameId, collectionIds });
+}
+
+/** Collection ids a game belongs to (for ticking the context-menu submenu). */
+export function gameCollections(gameId: number): Promise<number[]> {
+  return call<number[]>("game_collections", { gameId });
 }
 
 // ── Events (api-contract §"Event contract") ──────────────────────────────────
