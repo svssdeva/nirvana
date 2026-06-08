@@ -155,6 +155,19 @@ export class LibraryView extends LitElement {
     .body {
       padding: 0 48px 48px;
     }
+    /* Continue row sits in its own band, separated from "All games" by a hairline. */
+    .body.continue {
+      padding-bottom: 28px;
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--hairline);
+    }
+    .section-h {
+      margin: 0 0 16px;
+      font-family: var(--font-display);
+      font-weight: 300;
+      font-size: 20px;
+      color: var(--on-surface);
+    }
     .error {
       max-width: 520px;
       background: var(--surface);
@@ -457,11 +470,16 @@ export class LibraryView extends LitElement {
         </div>
         ${this.renderFilters()}
         ${!this.hasActiveFilter() && this.games.length
-          ? html`<div class="body" style="padding-bottom:0">
+          ? html`<div class="body continue">
               <continue-row .games=${recentlyPlayed(this.games)}></continue-row>
             </div>`
           : nothing}
-        <div class="body">${this.renderBody()}</div>
+        <div class="body">
+          ${!this.hasActiveFilter() && this.games.length
+            ? html`<h2 class="section-h">All games</h2>`
+            : nothing}
+          ${this.renderBody()}
+        </div>
       </view-page>
     `;
   }

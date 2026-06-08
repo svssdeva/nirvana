@@ -17,8 +17,12 @@ import {
   setGameCollections,
 } from "../../ipc";
 import { formatBytes, tagHue } from "../../format";
-import type { MenuItem } from "../context-menu";
-import { ContextMenu } from "../context-menu";
+// Side-effect import registers the <context-menu> custom element. Required: the
+// `ContextMenu` symbol below is used only in type position, so a type-only import
+// would be elided and `customElements.define` would never run (right-click would
+// then create a dead element and silently do nothing).
+import "../context-menu";
+import type { ContextMenu, MenuItem } from "../context-menu";
 
 const SOURCE_LABEL: Record<Source, string> = {
   steam: "Steam",
