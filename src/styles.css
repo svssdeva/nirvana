@@ -99,6 +99,11 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
+  /* Kill the phantom horizontal scrollbar from sub-pixel flex/grid rounding +
+     the scrollbar gutter. `clip` (not `hidden`) doesn't create a scroll
+     container, so it leaves `position: sticky` (the nav) and vertical scrolling
+     intact. We have no intentional horizontal scroll to lose. */
+  overflow-x: clip;
 }
 
 body {
