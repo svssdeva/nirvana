@@ -387,6 +387,55 @@ impl Db {
         Ok(())
     }
 
+    /// Replace a game's collection memberships (like `set_tags`). `NotFound` if
+    /// the game doesn't exist. Unknown collection ids are ignored.
+    pub fn set_game_collections(&self, game_id: i64, collection_ids: &[i64]) -> CoreResult<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        let exists: bool = tx
+            .query_row("SELECT 1 FROM game WHERE id=?1", params![game_id], |_| {
+                Ok(())
+            })
+            .optional()?
+            .is_some();
+        if !exists {
+            return Err(CoreError::NotFound(format!("game {game_id}")));
+        }
+        tx.execute(
+            "DELETE FROM collection_game WHERE game_id=?1",
+            params![game_id],
+        )?;
+        for cid in collection_ids {
+            tx.execute(
+                "INSERT OR IGNORE INTO collection_game (collection_id, game_id) \
+                 SELECT ?1, ?2 WHERE EXISTS (SELECT 1 FROM collection WHERE id=?1)",
+                params![cid, game_id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Collection ids a game belongs to (ascending).
+    pub fn game_collections(&self, game_id: i64) -> CoreResult<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT collection_id FROM collection_game WHERE game_id=?1 ORDER BY collection_id",
+        )?;
+        let rows = stmt.query_map(params![game_id], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Set of game ids in a collection (for the library filter).
+    pub fn collection_member_ids(
+        &self,
+        collection_id: i64,
+    ) -> CoreResult<std::collections::HashSet<i64>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT game_id FROM collection_game WHERE collection_id=?1")?;
+        let rows = stmt.query_map(params![collection_id], |r| r.get::<_, i64>(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// All game→tag-names in one query, grouped by game id.
     fn all_tags(&self) -> CoreResult<std::collections::HashMap<i64, Vec<String>>> {
         let mut stmt = self.conn.prepare(
@@ -827,5 +876,32 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM collection_game", [], |r| r.get(0))
             .unwrap();
         assert_eq!(n, 0, "membership cascades when the game is deleted");
+    }
+
+    #[test]
+    fn set_and_read_game_collections() {
+        let db = Db::open_in_memory().unwrap();
+        let g = db
+            .upsert_game(&sample_game("Celeste", r"C:\g\celeste"))
+            .unwrap();
+        let a = db.create_collection("A").unwrap();
+        let b = db.create_collection("B").unwrap();
+        db.set_game_collections(g, &[a, b]).unwrap();
+        assert_eq!(db.game_collections(g).unwrap(), vec![a, b]);
+        // Replace-set semantics: now only B.
+        db.set_game_collections(g, &[b]).unwrap();
+        assert_eq!(db.game_collections(g).unwrap(), vec![b]);
+        assert_eq!(db.collection_member_ids(b).unwrap().len(), 1);
+        assert!(db.collection_member_ids(a).unwrap().is_empty());
+    }
+
+    #[test]
+    fn set_collections_for_missing_game_is_not_found() {
+        let db = Db::open_in_memory().unwrap();
+        let a = db.create_collection("A").unwrap();
+        assert!(matches!(
+            db.set_game_collections(999, &[a]).unwrap_err(),
+            CoreError::NotFound(_)
+        ));
     }
 }
