@@ -6,6 +6,8 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] — 2026-06-08
+
 ### Added
 - **GOG Galaxy** as a discovered source: games are found from the Windows
   registry (works for DRM-free installs without the Galaxy client) and enriched
@@ -31,6 +33,14 @@ All notable changes to **Nirvana** are recorded here. Format follows
   themed, with no UI change).
 - Game tiles drop the tag/cover overlay buttons (those actions moved into the
   context menu); the favorite star stays.
+- Themed, slim scrollbars; the Continue row is capped at 5 games in a
+  non-scrolling responsive grid.
+- Disabled the unused `withGlobalTauri` global API bridge (smaller injected
+  runtime, reduced attack surface).
+
+### Fixed
+- Phantom horizontal scrollbar on every page (sub-pixel rounding) — clipped at
+  the root without affecting the sticky nav or vertical scroll.
 
 ## [0.1.0-alpha.3] — 2026-06-08
 
@@ -123,7 +133,8 @@ First public alpha — a fully offline Windows game launcher.
 - Per-user **NSIS installer** (no admin) and a **portable** `nirvana.exe`.
 - Size-optimized release profile (~7 MB binary).
 
-[Unreleased]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.3...HEAD
+[Unreleased]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.4...HEAD
+[0.1.0-alpha.4]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/svssdeva/nirvana/releases/tag/v0.1.0-alpha.1
