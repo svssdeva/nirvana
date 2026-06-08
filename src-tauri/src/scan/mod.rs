@@ -244,6 +244,19 @@ mod tests {
     }
 
     #[test]
+    fn dedup_prefers_gog_over_local() {
+        // A DRM-free GOG game also matched by the local-folder scanner: the GOG
+        // row (real product id + store metadata) outranks the bare local match.
+        let games = vec![
+            game(Source::Local, "Stellaris", r"D:\GOG\Stellaris"),
+            game(Source::Gog, "Stellaris", r"D:\GOG\Stellaris"),
+        ];
+        let out = dedup(games);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].source, Source::Gog);
+    }
+
+    #[test]
     fn dedup_preserves_distinct_games_in_order() {
         let games = vec![
             game(Source::Steam, "A", r"C:\g\a"),

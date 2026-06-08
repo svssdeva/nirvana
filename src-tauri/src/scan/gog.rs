@@ -8,9 +8,18 @@ use crate::error::CoreResult;
 use crate::models::{Game, Source};
 use crate::os::{FileSystem, Hive, Registry};
 use crate::scan::drive_of;
+use crate::scan::store::ScanCtx;
 use rusqlite::{Connection, OpenFlags};
 use std::collections::HashSet;
 use std::path::Path;
+
+/// Descriptor adapter (spec §4): registry games (the reliable spine) enriched
+/// with Galaxy DB entries, merged by productId. This is the `scan` fn the GOG
+/// [`crate::scan::store::Descriptor`] points at.
+pub fn scan(ctx: &ScanCtx) -> CoreResult<Vec<Game>> {
+    let games = scan_registry(ctx.registry, ctx.fs)?;
+    Ok(merge(games, &GalaxyDb, &ctx.program_data))
+}
 
 /// Per-game registry keys live under here; each subkey name is a GOG productId.
 const GOG_GAMES_KEY: &str = r"SOFTWARE\WOW6432Node\GOG.com\Games";

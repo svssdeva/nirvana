@@ -64,6 +64,14 @@ pub static STORES: &[Descriptor] = &[
         launch: LaunchStrategy::Protocol,
     },
     Descriptor {
+        source: Source::Gog,
+        display: "GOG",
+        color: "#a23fff",
+        rank: 2,
+        scan: crate::scan::gog::scan,
+        launch: LaunchStrategy::Hybrid,
+    },
+    Descriptor {
         source: Source::Local,
         display: "Local",
         color: "#0070d1",
@@ -92,10 +100,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_registered_source_is_unique() {
-        // GOG joins STORES in a later task; assert the current set is consistent
-        // (exactly one descriptor per registered source).
-        for s in [Source::Steam, Source::Epic, Source::Local] {
+    fn every_source_has_exactly_one_descriptor() {
+        // Guards against adding a Source variant without registering its store.
+        for s in [Source::Steam, Source::Epic, Source::Local, Source::Gog] {
             let n = STORES.iter().filter(|d| d.source == s).count();
             assert_eq!(n, 1, "source {s:?} needs exactly one descriptor");
         }
