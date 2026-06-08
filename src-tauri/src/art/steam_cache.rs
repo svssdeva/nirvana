@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 const PORTRAIT: &str = "library_600x900.jpg";
 /// Landscape header — fallback when no portrait capsule is cached.
 const HEADER: &str = "header.jpg";
+/// Landscape hero — the big banner art (preferred for the hero surface).
+const HERO: &str = "library_hero.jpg";
 
 /// Resolve an existing cover file for `appid`, or `None` if nothing is cached.
 /// Candidates are probed in preference order; the first that exists as a file
@@ -26,6 +28,20 @@ pub fn resolve(fs: &dyn FileSystem, steam_root: &Path, appid: &str) -> Option<Pa
     let candidates = [
         per_appid.join(PORTRAIT),
         base.join(format!("{appid}_{PORTRAIT}")),
+        per_appid.join(HEADER),
+        base.join(format!("{appid}_{HEADER}")),
+    ];
+    candidates.into_iter().find(|p| is_file(fs, p))
+}
+
+/// Resolve a landscape hero/header for `appid`, or `None`. Hero preferred, then
+/// the smaller header. Mirrors [`resolve`]'s per-appid + flat-legacy probing.
+pub fn resolve_hero(fs: &dyn FileSystem, steam_root: &Path, appid: &str) -> Option<PathBuf> {
+    let base = steam_root.join("appcache").join("librarycache");
+    let per_appid = base.join(appid);
+    let candidates = [
+        per_appid.join(HERO),
+        base.join(format!("{appid}_{HERO}")),
         per_appid.join(HEADER),
         base.join(format!("{appid}_{HEADER}")),
     ];
@@ -81,5 +97,33 @@ mod tests {
     fn returns_none_when_nothing_cached() {
         let fs = FakeFs::new();
         assert!(resolve(&fs, Path::new(ROOT), "440").is_none());
+    }
+
+    #[test]
+    fn resolve_hero_prefers_library_hero_then_header() {
+        let fs = FakeFs::new()
+            .with_file(cache_path(r"440\header.jpg"), "h")
+            .with_file(cache_path(r"440\library_hero.jpg"), "hero");
+        let got = resolve_hero(&fs, Path::new(ROOT), "440").unwrap();
+        assert_eq!(got, PathBuf::from(cache_path(r"440\library_hero.jpg")));
+    }
+
+    #[test]
+    fn resolve_hero_falls_back_to_header_and_flat_legacy() {
+        let fs = FakeFs::new().with_file(cache_path("570_library_hero.jpg"), "x");
+        assert_eq!(
+            resolve_hero(&fs, Path::new(ROOT), "570").unwrap(),
+            PathBuf::from(cache_path("570_library_hero.jpg"))
+        );
+        let fs2 = FakeFs::new().with_file(cache_path(r"440\header.jpg"), "h");
+        assert_eq!(
+            resolve_hero(&fs2, Path::new(ROOT), "440").unwrap(),
+            PathBuf::from(cache_path(r"440\header.jpg"))
+        );
+    }
+
+    #[test]
+    fn resolve_hero_none_when_nothing_cached() {
+        assert!(resolve_hero(&FakeFs::new(), Path::new(ROOT), "440").is_none());
     }
 }

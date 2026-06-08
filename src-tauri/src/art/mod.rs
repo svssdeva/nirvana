@@ -72,6 +72,21 @@ pub fn resolve_cover(
     CoverRef::Placeholder
 }
 
+/// Resolve a landscape hero for the banner. Steam-only offline; non-Steam (or no
+/// cached art) → Placeholder (the banner draws a themed gradient instead).
+pub fn resolve_hero(game: &Game, fs: &dyn FileSystem, steam_root: Option<&Path>) -> CoverRef {
+    if game.source == Source::Steam {
+        if let Some(root) = steam_root {
+            if let Some(found) = steam_cache::resolve_hero(fs, root, &game.external_id) {
+                return CoverRef::Image {
+                    path: path_string(&found),
+                };
+            }
+        }
+    }
+    CoverRef::Placeholder
+}
+
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
@@ -177,6 +192,22 @@ mod tests {
             CoverRef::Icon { path } => assert!(path.ends_with(".png")),
             other => panic!("expected exe-icon Icon, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn hero_resolves_steam_cache_hero_else_placeholder() {
+        let hero = format!(r"{STEAM_ROOT}\appcache\librarycache\440\library_hero.jpg");
+        let fs = FakeFs::new().with_file(&hero, "x");
+        assert_eq!(
+            resolve_hero(&steam_game("440"), &fs, Some(Path::new(STEAM_ROOT))),
+            CoverRef::Image { path: hero }
+        );
+        let mut local = steam_game("440");
+        local.source = Source::Local;
+        assert_eq!(
+            resolve_hero(&local, &FakeFs::new(), Some(Path::new(STEAM_ROOT))),
+            CoverRef::Placeholder
+        );
     }
 
     #[test]
