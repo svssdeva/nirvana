@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use std::path::Path;
 
 /// Current schema version. Bump and append to `MIGRATIONS` for each change.
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// Forward-only migrations. Index `i` brings the DB from version `i` to `i+1`.
 const MIGRATIONS: &[&str] = &[
@@ -73,6 +73,20 @@ const MIGRATIONS: &[&str] = &[
     INSERT INTO game_new SELECT * FROM game;
     DROP TABLE game;
     ALTER TABLE game_new RENAME TO game;
+    "#,
+    // v3 — user collections: named, curated groups of games (Priority 2).
+    // Mirrors tag/game_tag. Runs FK-off (migrate() handles that).
+    r#"
+    CREATE TABLE collection (
+        id        INTEGER PRIMARY KEY,
+        name      TEXT NOT NULL UNIQUE,
+        position  INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE collection_game (
+        collection_id INTEGER NOT NULL REFERENCES collection(id) ON DELETE CASCADE,
+        game_id       INTEGER NOT NULL REFERENCES game(id)       ON DELETE CASCADE,
+        PRIMARY KEY (collection_id, game_id)
+    );
     "#,
 ];
 
@@ -706,5 +720,32 @@ mod tests {
             .unwrap();
         assert_eq!(id1, id2, "trailing separator should not create a duplicate");
         assert_eq!(db.list_games().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn v3_creates_collection_tables_and_cascades() {
+        let db = Db::open_in_memory().unwrap();
+        let gid = db
+            .upsert_game(&sample_game("Hades", r"C:\Steam\hades"))
+            .unwrap();
+        // Tables exist; insert a collection + membership directly.
+        db.conn
+            .execute("INSERT INTO collection (name) VALUES ('Fav')", [])
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO collection_game (collection_id, game_id) VALUES (1, ?1)",
+                rusqlite::params![gid],
+            )
+            .unwrap();
+        // Deleting the game cascades its membership row away.
+        db.conn
+            .execute("DELETE FROM game WHERE id=?1", rusqlite::params![gid])
+            .unwrap();
+        let n: i64 = db
+            .conn
+            .query_row("SELECT COUNT(*) FROM collection_game", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "membership cascades when the game is deleted");
     }
 }
