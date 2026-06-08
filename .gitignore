@@ -40,6 +40,3 @@ docs/plan/
 /src-tauri/icons/android/
 /src-tauri/icons/ios/
 docs/adr/
-
-# CI workflow — push manually after: gh auth refresh -s workflow
-/.github/workflows/

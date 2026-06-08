@@ -1,0 +1,61 @@
+name: release
+
+# Build + publish a GitHub Release when a version tag is pushed (e.g.
+# v0.1.0-alpha.1), or on demand. Produces the NSIS installer (via tauri-action)
+# and the standalone portable .exe, attached to a pre-release.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: bun install
+
+      # Builds the release bundle (NSIS), creates the GitHub Release from the tag,
+      # and uploads the installer. Marked pre-release for alpha.
+      - name: Build + release (installer)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Nirvana ${{ github.ref_name }}"
+          releaseBody: |
+            Alpha build of Nirvana.
+
+            - **Installer:** `Nirvana_*_x64-setup.exe` (per-user, no admin).
+            - **Portable:** `nirvana.exe` (no install; needs the WebView2 runtime,
+              preinstalled on Windows 11).
+
+            Unsigned — SmartScreen may warn on first run (More info → Run anyway).
+          prerelease: true
+
+      # Attach the standalone portable exe to the same release (Tauri has no
+      # portable bundle target, so the bare release binary is the portable build).
+      - name: Upload portable exe
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          prerelease: true
+          files: src-tauri/target/release/nirvana.exe
