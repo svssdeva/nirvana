@@ -567,6 +567,42 @@ pub fn set_cover(
     Ok(Some(dest_str))
 }
 
+/// Clear a game's custom cover and delete the copied file (best-effort), reverting
+/// to auto-resolved art.
+#[tauri::command]
+pub fn clear_cover(app: AppHandle, state: State<'_, AppState>, id: i64) -> CommandResult<()> {
+    use tauri::Manager;
+    {
+        let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+        db.clear_cover_path(id)?;
+    }
+    // Best-effort: remove any custom-<id>.<ext> we copied into the cache.
+    if let Ok(covers) = app.path().app_cache_dir().map(|d| d.join("covers")) {
+        for ext in ["png", "jpg", "jpeg", "webp", "bmp", "gif"] {
+            let _ = std::fs::remove_file(covers.join(format!("custom-{id}.{ext}")));
+        }
+    }
+    Ok(())
+}
+
+/// Regenerate a game's auto art: delete its cached exe-icon so `get_cover`
+/// re-extracts. A user-chosen custom cover is left intact (use `clear_cover`).
+#[tauri::command]
+pub fn regenerate_art(app: AppHandle, state: State<'_, AppState>, id: i64) -> CommandResult<()> {
+    use tauri::Manager;
+    let exe = {
+        let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+        db.get_game(id)?
+            .ok_or_else(|| CoreError::NotFound(format!("game {id}")))?
+            .exe_path
+    };
+    if let (Some(exe), Ok(icons)) = (exe, app.path().app_cache_dir().map(|d| d.join("icons"))) {
+        let name = crate::art::exe_icon::cache_file_name(std::path::Path::new(&exe));
+        let _ = std::fs::remove_file(icons.join(name)); // best-effort
+    }
+    Ok(())
+}
+
 /// Open a game's install folder in the OS file manager (via `tauri-plugin-opener`).
 #[tauri::command]
 pub fn open_install_folder(

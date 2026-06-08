@@ -244,6 +244,16 @@ export function setCover(id: number): Promise<string | null> {
   return call<string | null>("set_cover", { id });
 }
 
+/** Clear a game's custom cover (revert to auto art). */
+export function clearCover(id: number): Promise<void> {
+  return call<void>("clear_cover", { id });
+}
+
+/** Regenerate a game's auto art (re-extract the exe icon). */
+export function regenerateArt(id: number): Promise<void> {
+  return call<void>("regenerate_art", { id });
+}
+
 /** UPI ID + offline-generated QR for the donation section. */
 export function getDonationInfo(): Promise<DonationInfo> {
   return call<DonationInfo>("get_donation_info");

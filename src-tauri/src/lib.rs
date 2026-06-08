@@ -83,6 +83,8 @@ pub fn run() {
             commands::seed_dummy_games,
             commands::get_system_info,
             commands::set_cover,
+            commands::clear_cover,
+            commands::regenerate_art,
             commands::open_task_manager,
             commands::reset_database
         ])
