@@ -103,6 +103,36 @@ pub fn get_library(
     Ok(library::apply_query(games, &query.unwrap_or_default()))
 }
 
+/// Store metadata (id, display name, brand color) for one source — the frontend
+/// themes badges, filter pills, and tile accents from this, so a new store
+/// auto-themes with no UI change. Mirrors `scan::store::Descriptor`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceInfo {
+    pub source: String,
+    pub display: String,
+    pub color: String,
+}
+
+/// Pure projection of the store registry (testable without Tauri `State`).
+fn source_infos() -> Vec<SourceInfo> {
+    scan::store::STORES
+        .iter()
+        .map(|d| SourceInfo {
+            source: d.source.as_str().to_string(),
+            display: d.display.to_string(),
+            color: d.color.to_string(),
+        })
+        .collect()
+}
+
+/// List every known store with its display name and brand color. Static (no
+/// `State`); the frontend loads it once to theme source badges/filters.
+#[tauri::command]
+pub fn list_sources() -> Vec<SourceInfo> {
+    source_infos()
+}
+
 /// Wipe the entire local database (games, tags, settings) — the Settings
 /// "delete database" action. Destructive; the UI confirms first.
 #[tauri::command]
@@ -155,10 +185,7 @@ pub fn launch_game(app: AppHandle, state: State<'_, AppState>, id: i64) -> Comma
                 .map_err(|e| CoreError::Io(std::io::Error::other(e.to_string())))?;
         }
         Source::Local => launch_local(&game)?,
-        // Hybrid GOG launch (goggalaxy:// or validated exe) lands in a later task.
-        Source::Gog => {
-            return Err(CoreError::Unsupported("gog launch not yet implemented".into()).into())
-        }
+        Source::Gog => launch_gog(&app, &game)?,
     }
 
     let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
@@ -185,6 +212,30 @@ fn launch_local(game: &Game) -> CoreResult<()> {
         .spawn()
         .map_err(CoreError::Io)?;
     Ok(())
+}
+
+/// Launch a GOG game (hybrid, threat-model TB3): via the `goggalaxy://` protocol
+/// when the Galaxy client is installed (gets its overlay / cloud saves), else by
+/// spawning the validated exe directly (DRM-free games run standalone).
+#[cfg(windows)]
+fn launch_gog(app: &AppHandle, game: &Game) -> CoreResult<()> {
+    use crate::os::registry::WindowsRegistry;
+    if launch::galaxy_installed(&WindowsRegistry) {
+        let url = launch::gog_launch_url(&game.external_id)?;
+        app.opener()
+            .open_url(url, None::<&str>)
+            .map_err(|e| CoreError::Io(std::io::Error::other(e.to_string())))?;
+        Ok(())
+    } else {
+        launch_local(game)
+    }
+}
+
+/// Off-Windows there's no registry to probe, so fall back to the validated exe.
+/// (The app only ships on Windows; this keeps the crate type-checking elsewhere.)
+#[cfg(not(windows))]
+fn launch_gog(_app: &AppHandle, game: &Game) -> CoreResult<()> {
+    launch_local(game)
 }
 
 /// Donation details for the Settings "Support Nirvana" section: the UPI ID + an
@@ -875,5 +926,17 @@ mod tests {
     fn ping_failure_surfaces_apperror_unsupported() {
         let err = ping(true).unwrap_err();
         assert_eq!(err.kind, ErrorKind::Unsupported);
+    }
+
+    #[test]
+    fn list_sources_covers_every_store_with_a_hex_color() {
+        let infos = source_infos();
+        assert_eq!(infos.len(), scan::store::STORES.len());
+        // GOG is registered with its brand purple.
+        assert!(infos
+            .iter()
+            .any(|i| i.source == "gog" && i.color == "#a23fff"));
+        // Every store exposes a hex color the UI can theme with.
+        assert!(infos.iter().all(|i| i.color.starts_with('#')));
     }
 }

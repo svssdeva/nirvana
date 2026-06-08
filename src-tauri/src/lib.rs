@@ -57,6 +57,7 @@ pub fn run() {
             commands::ping,
             commands::scan_library,
             commands::get_library,
+            commands::list_sources,
             commands::get_cover,
             commands::launch_game,
             commands::get_donation_info,

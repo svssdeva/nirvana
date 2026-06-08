@@ -49,6 +49,36 @@ pub fn steam_uninstall_url(appid: &str) -> CoreResult<String> {
     Ok(format!("steam://uninstall/{appid}"))
 }
 
+/// Build the GOG run URL for a productId. The id is validated to be non-empty
+/// ASCII digits before interpolation (TB2 boundary check) — same guard as
+/// [`steam_launch_url`] — so a crafted registry value can't smuggle extra path
+/// segments or query params into the URL.
+pub fn gog_launch_url(product_id: &str) -> CoreResult<String> {
+    if product_id.is_empty() || !product_id.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(CoreError::Parse(format!(
+            "invalid gog product id: {product_id:?}"
+        )));
+    }
+    Ok(format!("goggalaxy://openGameView/{product_id}"))
+}
+
+/// Whether the GOG Galaxy client is installed: its registry path is present AND
+/// the referenced client executable exists on disk. Drives the hybrid launch
+/// choice (protocol vs. direct exe). Takes the [`Registry`] seam so it's testable
+/// without a real install.
+pub fn galaxy_installed(reg: &dyn crate::os::Registry) -> bool {
+    use crate::os::Hive;
+    reg.read_string(
+        Hive::LocalMachine,
+        r"SOFTWARE\WOW6432Node\GOG.com\GalaxyClient\paths",
+        "client",
+    )
+    .ok()
+    .flatten()
+    .map(|p| Path::new(&p).exists())
+    .unwrap_or(false)
+}
+
 /// Validate a local game's executable before spawning it (threat-model TB3).
 /// Canonicalizes `exe` and `install_root`, then requires the exe to be an
 /// existing `.exe` file located **under** the install root — defeating `..`
@@ -130,6 +160,53 @@ mod tests {
     fn builds_and_validates_steam_uninstall_url() {
         assert_eq!(steam_uninstall_url("440").unwrap(), "steam://uninstall/440");
         assert!(steam_uninstall_url("4 4 0").is_err());
+    }
+
+    #[test]
+    fn builds_gog_launch_url() {
+        assert_eq!(
+            gog_launch_url("1207658924").unwrap(),
+            "goggalaxy://openGameView/1207658924"
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_gog_product_id() {
+        assert!(gog_launch_url("").is_err());
+        assert!(gog_launch_url("abc").is_err());
+        assert!(gog_launch_url("12 && calc").is_err());
+        assert!(gog_launch_url("12/../x").is_err());
+    }
+
+    #[test]
+    fn galaxy_installed_true_only_when_client_path_exists() {
+        use crate::os::registry::FakeRegistry;
+        use crate::os::Hive;
+        const PATHS: &str = r"SOFTWARE\WOW6432Node\GOG.com\GalaxyClient\paths";
+
+        // No registry value → not installed.
+        assert!(!galaxy_installed(&FakeRegistry::new()));
+
+        // Value present but the file doesn't exist → not installed.
+        let stale = FakeRegistry::new().with_value(
+            Hive::LocalMachine,
+            PATHS,
+            "client",
+            r"C:\nope\GalaxyClient.exe",
+        );
+        assert!(!galaxy_installed(&stale));
+
+        // Value points at a real file → installed.
+        let dir = tempfile::tempdir().unwrap();
+        let client = dir.path().join("GalaxyClient.exe");
+        std::fs::write(&client, b"MZ").unwrap();
+        let ok = FakeRegistry::new().with_value(
+            Hive::LocalMachine,
+            PATHS,
+            "client",
+            client.to_str().unwrap(),
+        );
+        assert!(galaxy_installed(&ok));
     }
 
     #[test]
