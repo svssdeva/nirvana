@@ -6,12 +6,18 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] — 2026-06-08
+
 ### Added
+- **Custom borderless title bar** themed to the app (drag region + min/restore/
+  close controls) replacing the default Windows frame.
 - Tag **filtering** + per-tag **colors** (clickable colored chips, tag pill row).
 - Library **layout switcher** (Comfortable grid / Compact list), persisted.
 - **System** panel on the Monitor page + an **Open Task Manager** button.
 - **About** section in Settings (what Nirvana is + the tech stack).
 - **Custom cover thumbnails** — set a local image as a game's cover (offline).
+- **Delete database** option (two-step confirm) in Settings.
+- Tag-triggered **GitHub release workflow** (NSIS installer + portable exe).
 - `FUTURE-PLANS.md` roadmap (Priority 1: more launchers/stores, color-themed).
 
 ### Changed
@@ -20,12 +26,18 @@ All notable changes to **Nirvana** are recorded here. Format follows
 - **System** info redesigned as labeled stat cards (icon + label + value).
 - **Settings** panels now fill the width as a responsive grid (no more narrow
   left column / blank right side).
+- **Sticky header** — the nav stays pinned while the page scrolls (all views).
+- Vite build tuned (modern WebView2 target, Oxc minify) and IPC diagnostics
+  gated to dev builds only.
 
 ### Fixed
 - GPU panel now detects adapters (WMI runs on a clean COM thread) and VRAM shows
   real system-wide usage (PDH) instead of `0 B`.
 - Local discovery no longer lists every installed program — it scans only the
-  user's configured **watch folders** (no app noise).
+  user's configured **watch folders** (no app noise); stale entries are pruned
+  on each scan.
+- Cold-start scan error on the empty library no longer surfaces (progress
+  listener hardened + one retry).
 
 ## [0.1.0-alpha.1] — 2026-06-07
 
@@ -64,5 +76,6 @@ First public alpha — a fully offline Windows game launcher.
 - Per-user **NSIS installer** (no admin) and a **portable** `nirvana.exe`.
 - Size-optimized release profile (~7 MB binary).
 
-[Unreleased]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.2...HEAD
+[0.1.0-alpha.2]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/svssdeva/nirvana/releases/tag/v0.1.0-alpha.1
