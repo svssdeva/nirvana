@@ -274,6 +274,7 @@ export interface Settings {
   monitorIntervalMs: number;
   watchFolders: string[];
   steamgriddbEnabled: boolean;
+  onboarded: boolean;
 }
 
 /** Read all persisted settings (with defaults). */

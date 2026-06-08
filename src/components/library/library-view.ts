@@ -1,7 +1,9 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import { consume } from "@lit/context";
+import { storeContext, type Store } from "../../store";
 import type { AppError, Game, LibraryQuery, SortBy, Source, SourceInfo } from "../../ipc";
-import { getLibrary, scanLibrary, sources, subscribe, toAppError } from "../../ipc";
+import { getLibrary, getSettings, scanLibrary, setSetting, sources, subscribe, toAppError } from "../../ipc";
 import { tagHue } from "../../format";
 import type { Density } from "./game-grid";
 import "../view-page";
@@ -213,12 +215,16 @@ export class LibraryView extends LitElement {
     }
   `;
 
+  @consume({ context: storeContext, subscribe: false }) private store!: Store;
+
   @state() private games: Game[] = [];
   @state() private status: Status = "loading";
   @state() private error: AppError | null = null;
   @state() private progress = new Map<Source, number>();
   /** Current filter/sort/search; sent to get_library on every change. */
   @state() private query: LibraryQuery = { sort: "name", descending: false };
+  /** Whether first-run onboarding has been completed (loaded from settings). */
+  @state() private onboarded = true;
 
   /** Tags seen across the library, kept from unfiltered loads so the tag pills
    *  don't vanish once a tag filter narrows the results. */
@@ -261,6 +267,11 @@ export class LibraryView extends LitElement {
     // Source pills are data-driven so a new store appears (themed) automatically.
     void sources()
       .then((s) => (this.sources = s))
+      .catch(() => {});
+    // Load the onboarded flag (default true so we don't flicker the onboarding
+    // card on reconnects; set to false only once the setting is confirmed unset).
+    void getSettings()
+      .then((s) => (this.onboarded = s.onboarded))
       .catch(() => {});
     this.addEventListener("library-changed", this.#onChanged);
     this.addEventListener("filter-tag", this.#onFilterTag);
@@ -382,6 +393,30 @@ export class LibraryView extends LitElement {
     return Boolean(q.search?.trim() || q.source || q.favoritesOnly || q.tag);
   }
 
+  /** Onboarding: scan the library then finish onboarding. */
+  private onScanNow = async (): Promise<void> => {
+    try {
+      await this.scan();
+    } finally {
+      await this.finishOnboarding();
+    }
+  };
+
+  /** Onboarding: navigate to Settings so the user can add watch folders. */
+  private goToFolders = (): void => {
+    this.store.setView("settings");
+  };
+
+  /** Onboarding: mark as onboarded locally and persist to DB. */
+  private finishOnboarding = async (): Promise<void> => {
+    this.onboarded = true;
+    try {
+      await setSetting("onboarded", "true");
+    } catch {
+      // best-effort; the in-memory flag is already flipped
+    }
+  };
+
   private progressText(): string {
     const parts = [...this.progress].map(
       ([source, found]) => `${source[0].toUpperCase()}${source.slice(1)} ${found}`,
@@ -500,6 +535,15 @@ export class LibraryView extends LitElement {
       `;
     }
     if (this.games.length === 0) {
+      // Not onboarded + no active filter → show the first-run welcome card.
+      if (!this.onboarded && !this.hasActiveFilter()) {
+        return html`<empty-state
+          variant="onboarding"
+          @scan-now=${this.onScanNow}
+          @add-folders=${this.goToFolders}
+          @dismiss=${this.finishOnboarding}
+        ></empty-state>`;
+      }
       // Distinguish a genuinely empty library from a filter that excludes everything.
       return this.hasActiveFilter()
         ? html`<empty-state

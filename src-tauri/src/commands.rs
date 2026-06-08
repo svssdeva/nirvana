@@ -345,6 +345,7 @@ pub struct Settings {
     monitor_interval_ms: u64,
     watch_folders: Vec<String>,
     steamgriddb_enabled: bool,
+    onboarded: bool,
 }
 
 /// Keys `set_setting` accepts — validated at the boundary (TB2).
@@ -353,6 +354,7 @@ const KNOWN_SETTINGS: &[&str] = &[
     "watchFolders",
     "steamgriddbEnabled",
     "theme",
+    "onboarded",
 ];
 
 /// Read all DB-backed settings with defaults.
@@ -369,10 +371,12 @@ pub fn get_settings(state: State<'_, AppState>) -> CommandResult<Settings> {
         .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
         .unwrap_or_default();
     let steamgriddb_enabled = db.get_setting("steamgriddbEnabled")?.as_deref() == Some("true");
+    let onboarded = db.get_setting("onboarded")?.as_deref() == Some("true");
     Ok(Settings {
         monitor_interval_ms,
         watch_folders,
         steamgriddb_enabled,
+        onboarded,
     })
 }
 
