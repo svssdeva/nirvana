@@ -18,12 +18,13 @@ use serde::Serialize;
 use std::path::Path;
 
 /// IPC cover reference — the discriminated union from `docs/api-contract.md`:
-/// `{ type: "image", path }` or `{ type: "placeholder" }`. Never errors on a
-/// missing cover; callers get [`CoverRef::Placeholder`].
+/// `{ type: "image", path }`, `{ type: "icon", path }`, or `{ type: "placeholder" }`.
+/// Never errors on a missing cover; callers get [`CoverRef::Placeholder`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum CoverRef {
     Image { path: String },
+    Icon { path: String },
     Placeholder,
 }
 
@@ -57,7 +58,7 @@ pub fn resolve_cover(
     if let Some(exe) = game.exe_path.as_deref() {
         match exe_icon::resolve(icons, Path::new(exe), icon_cache_dir) {
             Ok(Some(found)) => {
-                return CoverRef::Image {
+                return CoverRef::Icon {
                     path: path_string(&found),
                 }
             }
@@ -173,8 +174,8 @@ mod tests {
         );
         let cover = resolve_cover(&game, &fs, None, &icons, dir.path());
         match cover {
-            CoverRef::Image { path } => assert!(path.ends_with(".png")),
-            CoverRef::Placeholder => panic!("expected exe-icon image"),
+            CoverRef::Icon { path } => assert!(path.ends_with(".png")),
+            other => panic!("expected exe-icon Icon, got {other:?}"),
         }
     }
 
@@ -183,6 +184,9 @@ mod tests {
         let img = serde_json::to_value(CoverRef::Image { path: "p".into() }).unwrap();
         assert_eq!(img["type"], "image");
         assert_eq!(img["path"], "p");
+        let ic = serde_json::to_value(CoverRef::Icon { path: "p".into() }).unwrap();
+        assert_eq!(ic["type"], "icon");
+        assert_eq!(ic["path"], "p");
         let ph = serde_json::to_value(CoverRef::Placeholder).unwrap();
         assert_eq!(ph["type"], "placeholder");
     }

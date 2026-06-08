@@ -88,7 +88,10 @@ export interface LibraryQuery {
 }
 
 /** Discriminated cover reference (api-contract §"Discriminated unions"). */
-export type CoverRef = { type: "image"; path: string } | { type: "placeholder" };
+export type CoverRef =
+  | { type: "image"; path: string }
+  | { type: "icon"; path: string }
+  | { type: "placeholder" };
 
 /** Donation details for the Settings "Support Nirvana" section. */
 export interface DonationInfo {
