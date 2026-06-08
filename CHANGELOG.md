@@ -6,6 +6,25 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+### Added
+- **Online edition** of each release — installer + portable built with the
+  optional SteamGridDB cover-art feature (`Nirvana-online_*`), alongside the
+  default offline build. Still OFF by default; key kept in the OS vault.
+- `CONTRIBUTING.md` — setup, conventions, and the offline/no-deletion ground rules.
+
+### Changed
+- README "latest" version is now a live release badge (no hardcoded version).
+- Debug builds use a separate `nirvana-dev.db`, so dev-only seeded dummy games
+  never appear in a release build's library/disk views.
+
+### Fixed
+- **Cold-start crash** "state not managed for `get_library`" on first launch —
+  the main window is now created after app state is initialized.
+- **Phantom Epic games** (e.g. a long-uninstalled Fortnite) no longer appear:
+  the scan skips `*.item` manifests whose install folder is gone.
+- **Monitor graphs**: the memory sparkline is no longer a flat line (it now
+  min-max scales to its own range), and all sparklines are smoothed.
+
 ## [0.1.0-alpha.2] — 2026-06-08
 
 ### Added

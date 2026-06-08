@@ -62,6 +62,15 @@ Work items:
 - **Backup / restore** the SQLite library; **CSV / JSON export**.
 - Optional **import** of a custom games list.
 
+## Packaging & trust
+
+- **Code signing** — sign the installers + portable exes so SmartScreen stops
+  warning on first run. Needs an OV or EV cert (or a cloud signer like Azure
+  Trusted Signing) wired into the release workflow. See `RELEASING.md → Code
+  signing`. Until then, builds ship unsigned ("More info → Run anyway").
+- **Auto-update** — Tauri's updater (signed update artifacts) so installs can
+  self-update instead of re-downloading. Depends on signing.
+
 ## Nice-to-haves
 
 - Light/dark **accent customization** (pick the primary color).

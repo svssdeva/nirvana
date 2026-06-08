@@ -1,8 +1,13 @@
 name: release
 
 # Build + publish a GitHub Release when a version tag is pushed (e.g.
-# v0.1.0-alpha.1), or on demand. Produces the NSIS installer (via tauri-action)
-# and the standalone portable .exe, attached to a pre-release.
+# v0.1.0-alpha.2), or on demand. Each release ships TWO editions, each as an
+# NSIS installer (via tauri-action) plus a standalone portable .exe:
+#   - offline: the default zero-network build
+#   - online:  built with --features steamgriddb (optional cover art), renamed so
+#              its artifacts don't collide with the offline ones
+# The matrix runs serially (max-parallel: 1) so the first job creates the
+# pre-release and the second reuses it.
 on:
   push:
     tags:
@@ -15,6 +20,19 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - edition: offline
+            args: ""
+            portable_as: "nirvana.exe"
+          - edition: online
+            # Override productName so the installer is Nirvana-online_*_setup.exe
+            # (distinct from the offline build's Nirvana_*_setup.exe).
+            args: "--features steamgriddb --config src-tauri/tauri.online.conf.json"
+            portable_as: "nirvana-online.exe"
     steps:
       - uses: actions/checkout@v4
 
@@ -28,12 +46,15 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: ${{ matrix.edition }} # editions have different feature sets
 
       - name: Install frontend deps
         run: bun install
 
-      # Builds the release bundle (NSIS), creates the GitHub Release from the tag,
-      # and uploads the installer. Marked pre-release for alpha.
+      # Builds the release bundle (NSIS), creates the GitHub Release from the tag
+      # (or reuses it on the second matrix job), and uploads the installer. Marked
+      # pre-release for alpha. `args` adds the steamgriddb feature for the online
+      # edition; empty for offline.
       - name: Build + release (installer)
         uses: tauri-apps/tauri-action@v0
         env:
@@ -42,20 +63,29 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Nirvana ${{ github.ref_name }}"
           releaseBody: |
-            Alpha build of Nirvana.
+            Alpha build of Nirvana. Pick **one** edition.
 
-            - **Installer:** `Nirvana_*_x64-setup.exe` (per-user, no admin).
-            - **Portable:** `nirvana.exe` (no install; needs the WebView2 runtime,
+            **Offline** (recommended — zero network requests, guaranteed at compile time):
+            - Installer: `Nirvana_*_x64-setup.exe` (per-user, no admin).
+            - Portable: `nirvana.exe` (no install; needs the WebView2 runtime,
               preinstalled on Windows 11).
+
+            **Online** (adds the optional SteamGridDB cover-art feature — still OFF
+            by default, toggled in Settings, API key kept in the OS vault):
+            - Installer: `Nirvana-online_*_x64-setup.exe`
+            - Portable: `nirvana-online.exe`
 
             Unsigned — SmartScreen may warn on first run (More info → Run anyway).
           prerelease: true
+          args: ${{ matrix.args }}
 
-      # Attach the standalone portable exe to the same release (Tauri has no
-      # portable bundle target, so the bare release binary is the portable build).
+      # Attach the standalone portable exe (Tauri has no portable bundle target, so
+      # the bare release binary is the portable build). The cargo binary is always
+      # `nirvana.exe`; rename per edition so the two don't clobber each other.
       - name: Upload portable exe
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          prerelease: true
-          files: src-tauri/target/release/nirvana.exe
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Copy-Item "src-tauri/target/release/nirvana.exe" "${{ matrix.portable_as }}"
+          gh release upload "${{ github.ref_name }}" "${{ matrix.portable_as }}" --clobber

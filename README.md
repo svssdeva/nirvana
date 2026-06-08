@@ -9,7 +9,12 @@
 </p>
 
 <p align="center">
-  <strong>Alpha</strong> · <code>v0.1.0-alpha.1</code> · by <a href="https://github.com/svssdeva">svssdeva</a> / beyondcodekarma
+  <a href="https://github.com/svssdeva/nirvana/releases/latest"><img src="https://img.shields.io/github/v/release/svssdeva/nirvana?include_prereleases&sort=semver&label=latest&color=0070d1" alt="Latest release" /></a>
+  &nbsp;·&nbsp; <strong>Alpha</strong> &nbsp;·&nbsp; by <a href="https://github.com/svssdeva">svssdeva</a> / beyondcodekarma
+</p>
+
+<p align="center">
+  <em>The badge above always tracks the newest published release — no manual version bumps in this file.</em>
 </p>
 
 ---
@@ -84,12 +89,23 @@ cargo clippy           # in src-tauri/ — lints
 ## Install (Windows)
 
 Grab a build from [Releases](../../releases), or build it yourself with
-`bun run tauri build`. Two artifacts are produced:
+`bun run tauri build`. Each release ships **two editions**, each as an installer
+and a portable exe:
 
-- **Installer** — `Nirvana_<version>_x64-setup.exe` (NSIS, **per-user**: installs
-  to `%LOCALAPPDATA%`, **no admin / UAC**).
-- **Portable** — `nirvana.exe` (run from anywhere, no install; needs the WebView2
-  runtime, preinstalled on Windows 11).
+| Edition | Files | Network |
+|---|---|---|
+| **Offline** (recommended) | `Nirvana_<version>_x64-setup.exe`, `nirvana.exe` | None, ever |
+| **Online** | `Nirvana-online_<version>_x64-setup.exe`, `nirvana-online.exe` | Only when you enable SteamGridDB cover art |
+
+- **Installer** — NSIS, **per-user**: installs to `%LOCALAPPDATA%`, **no admin / UAC**.
+- **Portable** — run from anywhere, no install; needs the WebView2 runtime
+  (preinstalled on Windows 11).
+
+> [!NOTE]
+> Pick **one** edition. The **Online** edition only differs by including the
+> optional SteamGridDB cover-art feature (still **off by default**, toggled in
+> Settings, API key kept in the OS vault). If you don't need online art, use
+> **Offline** — it makes zero network requests, guaranteed at compile time.
 
 > [!IMPORTANT]
 > Builds are **unsigned** (no code-signing certificate), so SmartScreen may warn
@@ -109,10 +125,18 @@ Grab a build from [Releases](../../releases), or build it yourself with
   ```
   The API key is stored in the OS credential vault, never on disk or in logs.
 
+## Contributing
+
+Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup,
+conventions, and the two non-negotiable rules (offline-by-default, no destructive
+file actions). Good first stops: the [`FUTURE-PLANS.md`](FUTURE-PLANS.md) backlog
+(next up: more stores) and open issues.
+
 ## Documentation
 
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to build, the conventions, PR flow
 - [`CHANGELOG.md`](CHANGELOG.md) — release notes
-- [`RELEASING.md`](RELEASING.md) — versioning + how releases are cut
+- [`RELEASING.md`](RELEASING.md) — versioning, the 2-edition pipeline, code signing
 - [`FUTURE-PLANS.md`](FUTURE-PLANS.md) — roadmap (next up: more stores)
 - [`docs/design.md`](docs/design.md) — the PlayStation-style design system
 - [`docs/PRD-game-launcher.md`](docs/PRD-game-launcher.md) — full product spec
