@@ -15,6 +15,8 @@ import {
   listCollections,
   gameCollections,
   setGameCollections,
+  clearCover,
+  regenerateArt,
 } from "../../ipc";
 import { formatBytes, tagHue } from "../../format";
 // Side-effect import registers the <context-menu> custom element. Required: the
@@ -497,6 +499,8 @@ export class GameTile extends LitElement {
       { id: "favorite", label: this.game.favorite ? "Unfavorite" : "Favorite" },
       { id: "cover", label: "Set cover" },
       { id: "tags", label: "Edit tags" },
+      { id: "regenerate", label: "Regenerate art" },
+      ...(this.game.coverPath != null ? [{ id: "clearcover", label: "Clear custom cover" }] : []),
       {
         id: "collections",
         label: "Add to collection",
@@ -538,6 +542,16 @@ export class GameTile extends LitElement {
       this.notifyChanged();
     } else if (id === "tags") {
       this.editingTags = true;
+    } else if (id === "regenerate") {
+      try { await regenerateArt(this.game.id); } catch { /* best-effort */ }
+      this.notifyChanged();
+      void this.loadCover();
+      return;
+    } else if (id === "clearcover") {
+      try { await clearCover(this.game.id); } catch { /* best-effort */ }
+      this.notifyChanged();
+      void this.loadCover();
+      return;
     } else if (id === "uninstall") {
       try {
         await uninstallGame(this.game.id);
