@@ -38,14 +38,18 @@ Work items:
 
 ## Priority 2 — Library UX
 
-- **Recently played / Continue** row + sort (we already store `last_played` /
-  `launch_count`).
-- **Right-click context menu** per tile (Launch, Open folder, Favorite, Set
-  cover, Tags, Uninstall) — tidier than overlay buttons.
-- **First-run onboarding** — prompt to add watch folders + run the first scan so
-  an empty library isn't confusing.
-- **Keyboard navigation** — `/` focuses search, arrows move, Enter launches.
-- **Collections / shelves** — user-defined groups beyond tags.
+> ✅ **Shipped:** Continue (recently-played) row, first-run onboarding,
+> right-click + keyboard context menu, full keyboard navigation, and
+> **collections** (curated named groups, filterable, managed in Settings).
+
+- ~~**Recently played / Continue** row + sort~~ ✅
+- ~~**Right-click context menu** per tile (Launch, Open folder, Favorite, Set
+  cover, Tags, Uninstall) — tidier than overlay buttons.~~ ✅
+- ~~**First-run onboarding** — prompt to add watch folders + run the first scan.~~ ✅
+- ~~**Keyboard navigation** — `/` focuses search, arrows move, Enter launches.~~ ✅
+- ~~**Collections**~~ ✅ (as a curated **filter dimension**). Still open: a
+  **shelves home view** (multiple horizontal rows, one per collection) and
+  drag-to-reorder — both reuse the shipped membership model.
 
 ## Priority 3 — Art & polish
 

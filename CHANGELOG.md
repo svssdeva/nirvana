@@ -15,10 +15,22 @@ All notable changes to **Nirvana** are recorded here. Format follows
 - An extensible **multi-store framework** (a `STORES` descriptor registry) so new
   stores are a localized addition; source badges and filter pills are now
   **color-themed** per store (GOG = purple), driven by a `list_sources` command.
+- **Continue row** — a recently-played strip at the top of the library.
+- **First-run onboarding** — an inline welcome (Scan now / Add watch folders)
+  instead of a bare empty grid on first launch.
+- **Right-click + keyboard context menu** per game (Launch, Open folder,
+  Favorite, Set cover, Edit tags, Add to collection, Uninstall) — opened by
+  right-click or Shift+F10.
+- **Keyboard navigation** — arrow keys move focus across the grid, Enter
+  launches, `/` focuses search, Esc clears, Shift+F10 opens the menu.
+- **Collections** — user-curated, named groups of games: filter by a collection,
+  add/remove via the context menu, manage them in Settings.
 
 ### Changed
 - The library's source filter pills are data-driven (a new store appears,
   themed, with no UI change).
+- Game tiles drop the tag/cover overlay buttons (those actions moved into the
+  context menu); the favorite star stays.
 
 ## [0.1.0-alpha.3] — 2026-06-08
 
