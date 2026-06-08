@@ -6,6 +6,8 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] — 2026-06-08
+
 ### Added
 - **Online edition** of each release — installer + portable built with the
   optional SteamGridDB cover-art feature (`Nirvana-online_*`), alongside the
@@ -95,6 +97,7 @@ First public alpha — a fully offline Windows game launcher.
 - Per-user **NSIS installer** (no admin) and a **portable** `nirvana.exe`.
 - Size-optimized release profile (~7 MB binary).
 
-[Unreleased]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.2...HEAD
+[Unreleased]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.3]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/svssdeva/nirvana/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/svssdeva/nirvana/releases/tag/v0.1.0-alpha.1
