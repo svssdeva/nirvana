@@ -15,7 +15,7 @@ pub mod state;
 
 use crate::db::Db;
 use crate::state::AppState;
-use tauri::Manager;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -35,6 +35,14 @@ pub fn run() {
             let db = Db::open(&dir.join("nirvana.db"))?;
             app.manage(AppState::new(db));
             allow_cover_dirs(app);
+            // Create the main window AFTER state is managed, never from config.
+            // The config-defined window's webview starts executing JS (and can
+            // invoke `get_library` etc.) concurrently with this setup hook — on a
+            // cold start that races `app.manage()` above and fails command state
+            // extraction ("state not managed for `get_library`"). Building it here
+            // guarantees the webview only loads once `AppState` is in place. The
+            // splash window (config-defined, calls no commands) covers the wait.
+            build_main_window(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -64,6 +72,22 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Build the main app window (hidden + borderless — we draw our own title bar).
+/// Mirrors what used to live in `tauri.conf.json`'s `app.windows`, but created
+/// here so it only spins up after `AppState` is managed (see the setup hook).
+/// Capabilities still bind by the `"main"` label, so the window permissions
+/// apply exactly as before.
+fn build_main_window(app: &tauri::App) -> tauri::Result<()> {
+    WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+        .title("Nirvana")
+        .inner_size(1280.0, 800.0)
+        .min_inner_size(900.0, 600.0)
+        .visible(false)
+        .decorations(false)
+        .build()?;
+    Ok(())
 }
 
 /// Grant the asset protocol read access to the directories covers come from, so
