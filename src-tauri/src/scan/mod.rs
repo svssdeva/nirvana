@@ -85,7 +85,8 @@ fn source_rank(source: Source) -> u8 {
     match source {
         Source::Steam => 0,
         Source::Epic => 1,
-        Source::Local => 2,
+        Source::Gog => 2,
+        Source::Local => 3,
     }
 }
 

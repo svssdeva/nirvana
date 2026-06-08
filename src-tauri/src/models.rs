@@ -11,6 +11,7 @@ pub enum Source {
     Steam,
     Epic,
     Local,
+    Gog,
 }
 
 impl Source {
@@ -20,6 +21,7 @@ impl Source {
             Source::Steam => "steam",
             Source::Epic => "epic",
             Source::Local => "local",
+            Source::Gog => "gog",
         }
     }
 
@@ -29,6 +31,7 @@ impl Source {
             "steam" => Ok(Source::Steam),
             "epic" => Ok(Source::Epic),
             "local" => Ok(Source::Local),
+            "gog" => Ok(Source::Gog),
             other => Err(CoreError::Parse(format!("unknown source: {other}"))),
         }
     }
@@ -110,13 +113,13 @@ mod tests {
 
     #[test]
     fn source_roundtrips_through_str() {
-        for s in [Source::Steam, Source::Epic, Source::Local] {
+        for s in [Source::Steam, Source::Epic, Source::Local, Source::Gog] {
             assert_eq!(Source::parse(s.as_str()).unwrap(), s);
         }
     }
 
     #[test]
     fn source_parse_rejects_unknown() {
-        assert!(Source::parse("gog").is_err());
+        assert!(Source::parse("origin").is_err());
     }
 }

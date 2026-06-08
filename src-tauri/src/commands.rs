@@ -155,6 +155,10 @@ pub fn launch_game(app: AppHandle, state: State<'_, AppState>, id: i64) -> Comma
                 .map_err(|e| CoreError::Io(std::io::Error::other(e.to_string())))?;
         }
         Source::Local => launch_local(&game)?,
+        // Hybrid GOG launch (goggalaxy:// or validated exe) lands in a later task.
+        Source::Gog => {
+            return Err(CoreError::Unsupported("gog launch not yet implemented".into()).into())
+        }
     }
 
     let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
@@ -687,6 +691,9 @@ fn dummy_games() -> Vec<(Game, Vec<String>)> {
                 Source::Steam => (100_000 + (i as u32) * 10).to_string(),
                 Source::Epic => format!("Fake{}", slug.replace(' ', "")),
                 Source::Local => format!(r"{install}\game.exe"),
+                // Dummy sources only cycle Steam/Epic/Local (i % 3), so this is
+                // unreachable in practice — present only for exhaustiveness.
+                Source::Gog => (1_200_000_000 + (i as u32)).to_string(),
             };
             let exe_path = matches!(source, Source::Local).then(|| format!(r"{install}\game.exe"));
             // Every 9th has an unknown size; others range ~2–112 GB.
