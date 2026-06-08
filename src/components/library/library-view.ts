@@ -234,6 +234,25 @@ export class LibraryView extends LitElement {
   #onChanged = () => void this.refresh();
   /** A tile's tag chip was clicked → filter by that tag. */
   #onFilterTag = (e: Event) => this.setTag((e as CustomEvent<string>).detail);
+  /** Global keydown: `/` → focus search; `Escape` → clear filters. */
+  #onGlobalKey = (e: KeyboardEvent): void => {
+    if (e.key === "/") {
+      const active = document.activeElement;
+      const tag = active?.tagName.toLowerCase() ?? "";
+      // Don't hijack focus when the user is already typing in an input/textarea.
+      if (tag === "input" || tag === "textarea") return;
+      e.preventDefault();
+      const input = this.renderRoot.querySelector<HTMLInputElement>("input.search");
+      input?.focus();
+    } else if (e.key === "Escape") {
+      // Clear search + all filters and reload.
+      this.query = { sort: "name", descending: false };
+      const input = this.renderRoot.querySelector<HTMLInputElement>("input.search");
+      if (input) input.value = "";
+      clearTimeout(this.#searchTimer);
+      void this.refresh();
+    }
+  };
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -245,6 +264,7 @@ export class LibraryView extends LitElement {
       .catch(() => {});
     this.addEventListener("library-changed", this.#onChanged);
     this.addEventListener("filter-tag", this.#onFilterTag);
+    document.addEventListener("keydown", this.#onGlobalKey);
   }
 
   override disconnectedCallback(): void {
@@ -253,6 +273,7 @@ export class LibraryView extends LitElement {
     this.#unlisteners = [];
     this.removeEventListener("library-changed", this.#onChanged);
     this.removeEventListener("filter-tag", this.#onFilterTag);
+    document.removeEventListener("keydown", this.#onGlobalKey);
     clearTimeout(this.#searchTimer);
   }
 
