@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import type { AppError, Game, LibraryQuery, SortBy, Source } from "../../ipc";
-import { getLibrary, scanLibrary, subscribe, toAppError } from "../../ipc";
+import type { AppError, Game, LibraryQuery, SortBy, Source, SourceInfo } from "../../ipc";
+import { getLibrary, scanLibrary, sources, subscribe, toAppError } from "../../ipc";
 import { tagHue } from "../../format";
 import type { Density } from "./game-grid";
 import "../view-page";
@@ -102,6 +102,17 @@ export class LibraryView extends LitElement {
       background: var(--primary);
       border-color: var(--primary);
       color: var(--on-primary);
+    }
+    /* Brand-color dot that color-codes each source pill. */
+    .sdot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: var(--rounded-full);
+      margin-right: 7px;
+      vertical-align: middle;
+      /* keep the dot visible on the blue active pill */
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
     }
     .fpill:focus-visible {
       outline: 2px solid var(--primary);
@@ -212,6 +223,8 @@ export class LibraryView extends LitElement {
   @state() private knownTags: string[] = [];
   /** Grid density, persisted in localStorage. */
   @state() private layout: Density = readLayout();
+  /** Known stores (id/display/color), for the source filter pills. */
+  @state() private sources: SourceInfo[] = [];
 
   #unlisteners: Array<() => void> = [];
   #searchTimer?: ReturnType<typeof setTimeout>;
@@ -224,6 +237,10 @@ export class LibraryView extends LitElement {
     super.connectedCallback();
     void this.listenForProgress();
     void this.refresh();
+    // Source pills are data-driven so a new store appears (themed) automatically.
+    void sources()
+      .then((s) => (this.sources = s))
+      .catch(() => {});
     this.addEventListener("library-changed", this.#onChanged);
     this.addEventListener("filter-tag", this.#onFilterTag);
   }
@@ -372,13 +389,15 @@ export class LibraryView extends LitElement {
 
   private renderFilters() {
     const q = this.query;
-    const sourcePill = (label: string, source?: Source) => html`
+    // `color` paints a small brand dot before the label; the active pill keeps
+    // design.md's blue chip treatment (the dot still identifies the source).
+    const sourcePill = (label: string, source?: Source, color?: string) => html`
       <button
         class="fpill ${q.source === source ? "active" : ""}"
         aria-pressed=${q.source === source ? "true" : "false"}
         @click=${() => this.setSource(source)}
       >
-        ${label}
+        ${color ? html`<span class="sdot" style="background:${color}"></span>` : nothing}${label}
       </button>
     `;
     return html`
@@ -390,8 +409,8 @@ export class LibraryView extends LitElement {
           aria-label="Search games"
           @input=${this.onSearch}
         />
-        ${sourcePill("All", undefined)} ${sourcePill("Steam", "steam")}
-        ${sourcePill("Epic", "epic")} ${sourcePill("Local", "local")}
+        ${sourcePill("All", undefined)}
+        ${this.sources.map((s) => sourcePill(s.display, s.source, s.color))}
         <button
           class="fpill ${q.favoritesOnly ? "active" : ""}"
           aria-pressed=${q.favoritesOnly ? "true" : "false"}

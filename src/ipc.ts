@@ -42,7 +42,15 @@ export function toAppError(e: unknown): AppError {
 }
 
 // ── Domain types (mirror models.rs serde camelCase) ──────────────────────────
-export type Source = "steam" | "epic" | "local";
+export type Source = "steam" | "epic" | "local" | "gog";
+
+/** Store metadata for theming badges/filters (mirrors the `SourceInfo` command). */
+export interface SourceInfo {
+  source: Source;
+  display: string;
+  /** Brand accent, hex (e.g. GOG `#a23fff`). */
+  color: string;
+}
 
 export interface Game {
   id: number;
@@ -182,6 +190,25 @@ export function scanLibrary(full = true): Promise<Game[]> {
 /** Read the persisted library (no scan), optionally filtered/sorted/searched. */
 export function getLibrary(query?: LibraryQuery): Promise<Game[]> {
   return call<Game[]>("get_library", { query: query ?? null });
+}
+
+/** List every known store with its display name + brand color (for theming). */
+export function listSources(): Promise<SourceInfo[]> {
+  return call<SourceInfo[]>("list_sources");
+}
+
+// The store set is static for the app's lifetime, so memoize one fetch and share
+// it across the many tiles/filters that need colors. Cleared on failure so a
+// later call can retry rather than caching a rejection forever.
+let _sourcesCache: Promise<SourceInfo[]> | undefined;
+export function sources(): Promise<SourceInfo[]> {
+  if (!_sourcesCache) {
+    _sourcesCache = listSources().catch((e) => {
+      _sourcesCache = undefined;
+      throw e;
+    });
+  }
+  return _sourcesCache;
 }
 
 /** Toggle a game's favorite flag (persisted). */

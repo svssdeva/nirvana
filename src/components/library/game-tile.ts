@@ -8,6 +8,7 @@ import {
   setCover,
   setFavorite,
   setTags,
+  sources,
   toAppError,
 } from "../../ipc";
 import { formatBytes, tagHue } from "../../format";
@@ -16,6 +17,7 @@ const SOURCE_LABEL: Record<Source, string> = {
   steam: "Steam",
   epic: "Epic",
   local: "Local",
+  gog: "GOG",
 };
 
 /**
@@ -317,6 +319,9 @@ export class GameTile extends LitElement {
   /** Whether the inline tag editor is open. */
   @state() private editingTags = false;
 
+  /** source → brand color, loaded once (memoized) for the badge fill. */
+  @state() private colors?: Map<Source, string>;
+
   #errorTimer?: ReturnType<typeof setTimeout>;
 
   /** Tell the container (library-view) that favorite/tags changed → reload. */
@@ -375,9 +380,26 @@ export class GameTile extends LitElement {
     if (changed.has("game")) void this.loadCover();
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // Brand colors are a progressive enhancement: if the call fails the badge
+    // keeps its default primary fill.
+    void sources()
+      .then((infos) => {
+        this.colors = new Map(infos.map((i) => [i.source, i.color]));
+      })
+      .catch(() => {});
+  }
+
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearTimeout(this.#errorTimer);
+  }
+
+  /** Inline badge fill from the source's brand color (empty → CSS default). */
+  private badgeStyle(source: Source): string {
+    const c = this.colors?.get(source);
+    return c ? `background:${c}` : "";
   }
 
   private async launch(): Promise<void> {
@@ -450,7 +472,7 @@ export class GameTile extends LitElement {
           <span class="linfo">
             <span class="lname" title=${name}>${name}</span>
             <span class="lmeta">
-              <span class="lbadge">${SOURCE_LABEL[source]}</span>
+              <span class="lbadge" style=${this.badgeStyle(source)}>${SOURCE_LABEL[source]}</span>
               ${size ? html`<span class="lsize">${size}</span>` : nothing}
               ${this.launching ? html`<span class="lstatus">Launching…</span>` : nothing}
               ${this.launchError ? html`<span class="lstatus err">${this.launchError}</span>` : nothing}
@@ -494,7 +516,7 @@ export class GameTile extends LitElement {
           aria-busy=${this.launching ? "true" : "false"}
           @click=${this.launch}
         >
-          <span class="badge">${SOURCE_LABEL[source]}</span>
+          <span class="badge" style=${this.badgeStyle(source)}>${SOURCE_LABEL[source]}</span>
           ${this.src
             ? html`<img src=${this.src} alt="" />`
             : html`<div class="placeholder" aria-hidden="true">▤</div>`}
