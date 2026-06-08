@@ -5,13 +5,18 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { storeContext, type Store, type Theme } from "../store";
 import {
   appVersion,
+  createCollection,
+  deleteCollection,
   getDonationInfo,
   getSettings,
+  listCollections,
   ping,
+  renameCollection,
   resetDatabase,
   seedDummyGames,
   setSetting,
   toAppError,
+  type Collection,
   type DonationInfo,
   type Settings,
 } from "../ipc";
@@ -290,6 +295,38 @@ export class SettingsView extends LitElement {
     .kv-row span:last-child {
       text-align: right;
     }
+    .coll-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: var(--surface-elevated);
+      border-radius: var(--rounded-sm);
+      margin: 0 0 8px;
+    }
+    .coll-name {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 15px;
+      color: var(--on-surface);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .coll-rename-input {
+      flex: 1 1 160px;
+      min-width: 0;
+      padding: 6px 10px;
+      font: 400 15px/1.25 var(--font-body);
+      color: var(--on-surface);
+      background: var(--bg);
+      border: 1px solid var(--hairline);
+      border-radius: var(--rounded-sm);
+    }
+    .coll-create-row {
+      margin-top: 12px;
+    }
     @media (max-width: 768px) {
       .panels {
         padding: 8px 24px 24px;
@@ -314,6 +351,15 @@ export class SettingsView extends LitElement {
   @state() private confirmReset = false;
   @state() private resetMsg = "";
   #resetTimer?: ReturnType<typeof setTimeout>;
+
+  @state() private collections: Collection[] = [];
+  @state() private newCollName = "";
+  @state() private collErr = "";
+  @state() private renamingId: number | null = null;
+  @state() private renamingValue = "";
+  @state() private confirmDeleteId: number | null = null;
+  #confirmDeleteTimer?: ReturnType<typeof setTimeout>;
+
   /** Vite sets this only in `tauri dev` builds. */
   private readonly isDev = import.meta.env.DEV;
 
@@ -324,6 +370,7 @@ export class SettingsView extends LitElement {
     super.connectedCallback();
     void this.loadSettings();
     void this.loadDonation();
+    void this.loadCollections();
     void appVersion()
       .then((v) => (this.version = v))
       .catch(() => {});
@@ -336,6 +383,7 @@ export class SettingsView extends LitElement {
     super.disconnectedCallback();
     clearTimeout(this.#copiedTimer);
     clearTimeout(this.#resetTimer);
+    clearTimeout(this.#confirmDeleteTimer);
     this.#storeUnsub?.();
   }
 
@@ -352,6 +400,52 @@ export class SettingsView extends LitElement {
       this.donation = await getDonationInfo();
     } catch {
       this.donation = null;
+    }
+  }
+
+  private async loadCollections(): Promise<void> {
+    try {
+      this.collections = await listCollections();
+    } catch {
+      this.collections = [];
+    }
+  }
+
+  private async addCollection(): Promise<void> {
+    const name = this.newCollName.trim();
+    if (!name) return;
+    try {
+      await createCollection(name);
+      this.newCollName = "";
+      this.collErr = "";
+      await this.loadCollections();
+    } catch (e) {
+      this.collErr = toAppError(e).message;
+    }
+  }
+
+  private async renameCollection_(id: number, name: string): Promise<void> {
+    const n = name.trim();
+    if (!n) return;
+    try {
+      await renameCollection(id, n);
+      this.renamingId = null;
+      this.renamingValue = "";
+      this.collErr = "";
+      await this.loadCollections();
+    } catch (e) {
+      this.collErr = toAppError(e).message;
+    }
+  }
+
+  private async deleteCollection_(id: number): Promise<void> {
+    try {
+      await deleteCollection(id);
+      this.confirmDeleteId = null;
+      clearTimeout(this.#confirmDeleteTimer);
+      await this.loadCollections();
+    } catch (e) {
+      this.collErr = toAppError(e).message;
     }
   }
 
@@ -406,6 +500,107 @@ export class SettingsView extends LitElement {
           ? html`<p class="result ok" role="status">${this.seedMsg}</p>`
           : nothing}
       </div>
+    `;
+  }
+
+  private renderCollections() {
+    return html`
+      <section class="panel" aria-labelledby="coll-h">
+        <h2 id="coll-h">Collections</h2>
+        <p>Group your games into named collections you can filter by.</p>
+
+        ${this.collections.length === 0
+          ? html`<p class="result ok" role="status">No collections yet.</p>`
+          : this.collections.map((c) => {
+              const isRenaming = this.renamingId === c.id;
+              const isConfirming = this.confirmDeleteId === c.id;
+              return html`
+                <div class="coll-row">
+                  ${isRenaming
+                    ? html`
+                        <input
+                          type="text"
+                          class="coll-rename-input"
+                          aria-label="New name for ${c.name}"
+                          .value=${this.renamingValue}
+                          @input=${(e: Event) =>
+                            (this.renamingValue = (e.target as HTMLInputElement).value)}
+                          @keydown=${(e: KeyboardEvent) => {
+                            if (e.key === "Enter") void this.renameCollection_(c.id, this.renamingValue);
+                            if (e.key === "Escape") {
+                              this.renamingId = null;
+                              this.renamingValue = "";
+                            }
+                          }}
+                        />
+                        <button
+                          class="fpill active"
+                          @click=${() => void this.renameCollection_(c.id, this.renamingValue)}
+                        >
+                          Save
+                        </button>
+                        <button
+                          class="fpill"
+                          @click=${() => {
+                            this.renamingId = null;
+                            this.renamingValue = "";
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      `
+                    : html`
+                        <span class="coll-name">${c.name}</span>
+                        <button
+                          class="fpill"
+                          aria-label="Rename ${c.name}"
+                          @click=${() => {
+                            this.renamingId = c.id;
+                            this.renamingValue = c.name;
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          class="fpill ${isConfirming ? "danger-btn" : ""}"
+                          aria-label="${isConfirming ? "Click again to confirm delete" : "Delete " + c.name}"
+                          @click=${() => {
+                            if (!isConfirming) {
+                              this.confirmDeleteId = c.id;
+                              clearTimeout(this.#confirmDeleteTimer);
+                              this.#confirmDeleteTimer = setTimeout(
+                                () => (this.confirmDeleteId = null),
+                                4000,
+                              );
+                            } else {
+                              clearTimeout(this.#confirmDeleteTimer);
+                              void this.deleteCollection_(c.id);
+                            }
+                          }}
+                        >
+                          ${isConfirming ? "Confirm delete" : "Delete"}
+                        </button>
+                      `}
+                </div>
+              `;
+            })}
+
+        <div class="row coll-create-row">
+          <input
+            type="text"
+            placeholder="New collection name"
+            aria-label="New collection name"
+            .value=${this.newCollName}
+            @input=${(e: Event) => (this.newCollName = (e.target as HTMLInputElement).value)}
+            @keydown=${(e: KeyboardEvent) => e.key === "Enter" && void this.addCollection()}
+          />
+          <button class="fpill" @click=${() => void this.addCollection()}>Create</button>
+        </div>
+
+        ${this.collErr
+          ? html`<p class="result error" role="alert">${this.collErr}</p>`
+          : nothing}
+      </section>
     `;
   }
 
@@ -492,7 +687,7 @@ export class SettingsView extends LitElement {
       <view-page heading="Settings" tagline="Preferences, support, and diagnostics.">
         <div class="panels">
           ${this.renderPreferences()} ${this.renderAbout()} ${this.renderSupport()}
-          ${this.renderDanger()}
+          ${this.renderCollections()} ${this.renderDanger()}
           ${this.isDev
             ? html`<div class="panel">
                   <h2>IPC diagnostics</h2>
