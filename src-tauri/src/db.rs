@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use std::path::Path;
 
 /// Current schema version. Bump and append to `MIGRATIONS` for each change.
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 /// Forward-only migrations. Index `i` brings the DB from version `i` to `i+1`.
 const MIGRATIONS: &[&str] = &[
@@ -44,6 +44,35 @@ const MIGRATIONS: &[&str] = &[
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );
+    "#,
+    // v2 — widen the `source` CHECK to the full planned store allowlist so new
+    // stores need no further migration. SQLite can't alter a CHECK, so rebuild
+    // `game` (same columns/order as v1, only the CHECK changes) and copy rows.
+    // `migrate` runs this with foreign_keys OFF, so dropping `game` can't
+    // cascade-delete `game_tag`; the new table reuses the same ids, so the
+    // existing tag links stay valid.
+    r#"
+    CREATE TABLE game_new (
+        id                INTEGER PRIMARY KEY,
+        source            TEXT NOT NULL CHECK (source IN
+            ('steam','epic','local','gog','xbox','ea','ubisoft','battlenet','itch','riot')),
+        external_id       TEXT NOT NULL,
+        name              TEXT NOT NULL,
+        name_norm         TEXT NOT NULL,
+        install_path      TEXT NOT NULL,
+        install_path_norm TEXT NOT NULL,
+        exe_path          TEXT,
+        size_bytes        INTEGER,
+        drive             TEXT,
+        last_played       INTEGER,
+        launch_count      INTEGER NOT NULL DEFAULT 0,
+        cover_path        TEXT,
+        favorite          INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (install_path_norm, name_norm)
+    );
+    INSERT INTO game_new SELECT * FROM game;
+    DROP TABLE game;
+    ALTER TABLE game_new RENAME TO game;
     "#,
 ];
 
@@ -324,19 +353,34 @@ fn normalize_tags(tags: &[String]) -> Vec<String> {
 }
 
 /// Apply any migrations the DB hasn't seen yet, each in its own transaction.
+///
+/// Foreign-key enforcement is disabled for the duration so a table-rebuild
+/// migration (e.g. v2's `DROP TABLE game`) can't trigger an implicit cascade
+/// into referencing tables like `game_tag`. `PRAGMA foreign_keys` is a no-op
+/// inside a transaction, so it's toggled here, around the per-migration ones,
+/// and restored to its prior state afterwards (SQLite's recommended procedure).
 fn migrate(conn: &mut Connection) -> CoreResult<()> {
-    let current: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-    for (i, sql) in MIGRATIONS.iter().enumerate() {
-        let target = i as i64 + 1;
-        if current >= target {
-            continue;
+    let fk_was_on: bool = conn.pragma_query_value(None, "foreign_keys", |r| r.get(0))?;
+    conn.pragma_update(None, "foreign_keys", false)?;
+
+    let result = (|| -> CoreResult<()> {
+        let current: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+        for (i, sql) in MIGRATIONS.iter().enumerate() {
+            let target = i as i64 + 1;
+            if current >= target {
+                continue;
+            }
+            let tx = conn.transaction()?;
+            tx.execute_batch(sql)?;
+            tx.pragma_update(None, "user_version", target)?;
+            tx.commit()?;
         }
-        let tx = conn.transaction()?;
-        tx.execute_batch(sql)?;
-        tx.pragma_update(None, "user_version", target)?;
-        tx.commit()?;
-    }
-    Ok(())
+        Ok(())
+    })();
+
+    // Restore prior FK enforcement regardless of migration outcome.
+    conn.pragma_update(None, "foreign_keys", fk_was_on)?;
+    result
 }
 
 /// Dedup-normalize a name or path: trimmed, lowercased, forward slashes → back.
@@ -451,6 +495,53 @@ mod tests {
         assert_eq!(games.len(), 1);
         assert_eq!(games[0].id, id);
         assert_eq!(games[0].name, "Half-Life");
+    }
+
+    #[test]
+    fn v2_migration_widens_check_and_preserves_tagged_rows() {
+        use rusqlite::Connection;
+        // Hand-build a v1 DB (old CHECK) and stop at version 1.
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
+        conn.pragma_update(None, "user_version", 1i64).unwrap();
+        // Seed a game with a tag association — the thing a naive table rebuild
+        // would cascade-delete when it drops `game`.
+        conn.execute(
+            "INSERT INTO game (source, external_id, name, name_norm, install_path, install_path_norm)
+             VALUES ('steam','1','Keep','keep',?1,?1)",
+            [r"c:\g\keep"],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO tag (name) VALUES ('RPG')", [])
+            .unwrap();
+        conn.execute("INSERT INTO game_tag (game_id, tag_id) VALUES (1, 1)", [])
+            .unwrap();
+        // Mimic the app: FK enforcement ON entering migrate. The rebuild must
+        // NOT cascade-delete game_tag.
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+
+        migrate(&mut conn).unwrap();
+
+        // The widened CHECK now accepts 'gog'.
+        conn.execute(
+            "INSERT INTO game (source, external_id, name, name_norm, install_path, install_path_norm)
+             VALUES ('gog','111','G','g',?1,?1)",
+            [r"c:\g\gog"],
+        )
+        .unwrap();
+        let games: i64 = conn
+            .query_row("SELECT COUNT(*) FROM game", [], |r| r.get(0))
+            .unwrap();
+        let links: i64 = conn
+            .query_row("SELECT COUNT(*) FROM game_tag", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(games, 2, "kept row + new gog row");
+        assert_eq!(links, 1, "tag association must survive the table rebuild");
+        // FK enforcement is restored after migrate.
+        let fk: i64 = conn
+            .pragma_query_value(None, "foreign_keys", |r| r.get(0))
+            .unwrap();
+        assert_eq!(fk, 1, "foreign_keys restored to on");
     }
 
     #[test]
