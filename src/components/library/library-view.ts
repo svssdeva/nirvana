@@ -2,8 +2,8 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { consume } from "@lit/context";
 import { storeContext, type Store } from "../../store";
-import type { AppError, Game, LibraryQuery, SortBy, Source, SourceInfo } from "../../ipc";
-import { getLibrary, getSettings, scanLibrary, setSetting, sources, subscribe, toAppError } from "../../ipc";
+import type { AppError, Collection, Game, LibraryQuery, SortBy, Source, SourceInfo } from "../../ipc";
+import { getLibrary, getSettings, listCollections, scanLibrary, setSetting, sources, subscribe, toAppError } from "../../ipc";
 import { tagHue } from "../../format";
 import type { Density } from "./game-grid";
 import "../view-page";
@@ -233,11 +233,13 @@ export class LibraryView extends LitElement {
   @state() private layout: Density = readLayout();
   /** Known stores (id/display/color), for the source filter pills. */
   @state() private sources: SourceInfo[] = [];
+  /** User-defined collections, for the collection filter pills. */
+  @state() private collections: Collection[] = [];
 
   #unlisteners: Array<() => void> = [];
   #searchTimer?: ReturnType<typeof setTimeout>;
-  /** A tile changed a favorite/tags → reload to reflect it (and re-filter). */
-  #onChanged = () => void this.refresh();
+  /** A tile changed a favorite/tags/collections → reload library + refresh pills. */
+  #onChanged = () => { void this.refresh(); this.loadCollections(); };
   /** A tile's tag chip was clicked → filter by that tag. */
   #onFilterTag = (e: Event) => this.setTag((e as CustomEvent<string>).detail);
   /** Global keydown: `/` → focus search; `Escape` → clear filters. */
@@ -268,6 +270,7 @@ export class LibraryView extends LitElement {
     void sources()
       .then((s) => (this.sources = s))
       .catch(() => {});
+    this.loadCollections();
     // Load the onboarded flag (default true so we don't flicker the onboarding
     // card on reconnects; set to false only once the setting is confirmed unset).
     void getSettings()
@@ -292,6 +295,17 @@ export class LibraryView extends LitElement {
     // Toggle off if the same tag is clicked again.
     this.query = { ...this.query, tag: this.query.tag === tag ? undefined : tag };
     void this.refresh();
+  }
+
+  private setCollection(id?: number): void {
+    this.query = { ...this.query, collection: this.query.collection === id ? undefined : id };
+    void this.refresh();
+  }
+
+  private loadCollections(): void {
+    void listCollections()
+      .then((c) => (this.collections = c))
+      .catch(() => {});
   }
 
   private setLayout(layout: Density): void {
@@ -390,7 +404,7 @@ export class LibraryView extends LitElement {
 
   private hasActiveFilter(): boolean {
     const q = this.query;
-    return Boolean(q.search?.trim() || q.source || q.favoritesOnly || q.tag);
+    return Boolean(q.search?.trim() || q.source || q.favoritesOnly || q.tag || q.collection != null);
   }
 
   /** Onboarding: scan the library then finish onboarding. */
@@ -511,6 +525,17 @@ export class LibraryView extends LitElement {
               >
                 ${t}
               </button>`,
+            )}
+          </div>`
+        : nothing}
+      ${this.collections.length
+        ? html`<div class="filters tags-row" role="group" aria-label="Filter by collection">
+            ${this.collections.map(
+              (c) => html`<button
+                class="fpill ${this.query.collection === c.id ? "active" : ""}"
+                aria-pressed=${this.query.collection === c.id ? "true" : "false"}
+                @click=${() => this.setCollection(c.id)}
+              >${c.name}</button>`,
             )}
           </div>`
         : nothing}
