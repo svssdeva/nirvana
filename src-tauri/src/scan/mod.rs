@@ -17,6 +17,7 @@
 pub mod epic;
 pub mod local;
 pub mod steam;
+pub mod store;
 pub mod vdf;
 
 use crate::db::{self, Db};
@@ -78,20 +79,9 @@ pub trait ScanEvents {
     fn done(&self, done: ScanDone);
 }
 
-/// Cross-source dedup priority: when two sources report the same game, keep the
-/// one whose source ranks lowest here. Steam/Epic carry richer store metadata
-/// (real `external_id`, cover cache) than a bare local-exe match, so they win.
-fn source_rank(source: Source) -> u8 {
-    match source {
-        Source::Steam => 0,
-        Source::Epic => 1,
-        Source::Gog => 2,
-        Source::Local => 3,
-    }
-}
-
 /// Collapse games that normalize to the same `(install_path, name)` key — the
-/// same key the DB enforces — keeping the highest-priority source per [`source_rank`].
+/// same key the DB enforces — keeping the highest-priority source per
+/// [`store::source_rank`] (richer store metadata outranks a bare local-exe match).
 /// First appearance determines output position (stable, scanner-order friendly).
 pub fn dedup(games: Vec<Game>) -> Vec<Game> {
     let mut out: Vec<Game> = Vec::with_capacity(games.len());
@@ -101,7 +91,9 @@ pub fn dedup(games: Vec<Game>) -> Vec<Game> {
         // `.copied()` drops the borrow of `index` before the arms so the `None`
         // arm can re-borrow it mutably to insert.
         match index.get(&key).copied() {
-            Some(i) if source_rank(game.source) < source_rank(out[i].source) => out[i] = game,
+            Some(i) if store::source_rank(game.source) < store::source_rank(out[i].source) => {
+                out[i] = game
+            }
             Some(_) => {} // a higher- or equal-priority duplicate already kept
             None => {
                 index.insert(key, out.len());

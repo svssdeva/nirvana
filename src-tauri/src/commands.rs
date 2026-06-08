@@ -789,35 +789,49 @@ fn scan_all_sources(
 ) -> Vec<(Source, CoreResult<Vec<Game>>)> {
     use crate::os::fs::WindowsFs;
     use crate::os::registry::WindowsRegistry;
-    use crate::scan::{epic::EpicScanner, local::LocalScanner, steam::SteamScanner};
+    use crate::scan::store::{ScanCtx, STORES};
 
     let reg = WindowsRegistry;
     let fs = WindowsFs;
-    let epic_dir = epic_manifests_dir();
+    let ctx = ScanCtx {
+        registry: &reg,
+        fs: &fs,
+        watch_folders: &watch_folders,
+        epic_dir: epic_manifests_dir(),
+        program_data: program_data_dir(),
+    };
 
     std::thread::scope(|s| {
-        let steam = s.spawn(|| SteamScanner::new(&reg, &fs).scan());
-        let epic = s.spawn(|| EpicScanner::new(&fs).scan(&epic_dir));
-        let local = s.spawn(|| LocalScanner::new(&fs).scan(&watch_folders));
-        vec![
-            (
-                Source::Steam,
-                steam
-                    .join()
-                    .unwrap_or_else(|_| Err(thread_panicked("steam"))),
-            ),
-            (
-                Source::Epic,
-                epic.join().unwrap_or_else(|_| Err(thread_panicked("epic"))),
-            ),
-            (
-                Source::Local,
-                local
-                    .join()
-                    .unwrap_or_else(|_| Err(thread_panicked("local"))),
-            ),
-        ]
+        // A shared reference (Copy) so each spawned closure borrows the same ctx
+        // rather than trying to move it.
+        let ctx = &ctx;
+        let handles: Vec<(Source, _)> = STORES
+            .iter()
+            .map(|d| {
+                let scan = d.scan;
+                (d.source, s.spawn(move || scan(ctx)))
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|(src, h)| {
+                (
+                    src,
+                    h.join()
+                        .unwrap_or_else(|_| Err(thread_panicked(src.as_str()))),
+                )
+            })
+            .collect()
     })
+}
+
+/// `%PROGRAMDATA%` (defaulting to `C:\ProgramData`) — where store-wide DBs live
+/// (e.g. GOG Galaxy's `galaxy-2.0.db`).
+#[cfg(windows)]
+fn program_data_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        std::env::var("PROGRAMDATA").unwrap_or_else(|_| r"C:\ProgramData".into()),
+    )
 }
 
 /// Error for a scanner thread that panicked (should not happen — scanners don't
