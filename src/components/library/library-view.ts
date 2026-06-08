@@ -11,6 +11,7 @@ import "../empty-state";
 import "./game-grid";
 import "./continue-row";
 import { recentlyPlayed } from "./continue-row";
+import "./hero-banner";
 
 const LAYOUT_KEY = "nirvana-layout";
 
@@ -469,11 +470,19 @@ export class LibraryView extends LitElement {
             : nothing}
         </div>
         ${this.renderFilters()}
-        ${!this.hasActiveFilter() && this.games.length
-          ? html`<div class="body continue">
-              <continue-row .games=${recentlyPlayed(this.games)}></continue-row>
-            </div>`
-          : nothing}
+        ${(() => {
+          if (this.hasActiveFilter() || !this.games.length) return nothing;
+          const recent = recentlyPlayed(this.games);
+          if (recent.length === 0) return nothing;
+          const [hero, ...rest] = recent;
+          return html`
+            <div class="body" style="padding-bottom:20px">
+              <hero-banner .game=${hero}></hero-banner>
+            </div>
+            ${rest.length
+              ? html`<div class="body continue"><continue-row .games=${rest}></continue-row></div>`
+              : nothing}`;
+        })()}
         <div class="body">
           ${!this.hasActiveFilter() && this.games.length
             ? html`<h2 class="section-h">All games</h2>`
