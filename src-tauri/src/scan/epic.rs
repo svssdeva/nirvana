@@ -62,10 +62,31 @@ impl<'a> EpicScanner<'a> {
                 continue;
             };
             if let Some(game) = game_from_manifest(manifest) {
-                games.push(game);
+                // Skip stale manifests whose install folder no longer exists.
+                // Epic leaves the `*.item` file behind after a game is
+                // uninstalled (and after the launcher itself is removed), which
+                // otherwise surfaces phantom games (e.g. a long-gone Fortnite).
+                if self.install_exists(&game.install_path) {
+                    games.push(game);
+                } else {
+                    tracing::debug!(
+                        name = %game.name,
+                        path = %game.install_path,
+                        "skipping Epic manifest: install folder is gone"
+                    );
+                }
             }
         }
         Ok(games)
+    }
+
+    /// Whether a manifest's install location still exists as a directory on
+    /// disk. A missing path (uninstalled) or a non-directory both count as gone.
+    fn install_exists(&self, install_path: &str) -> bool {
+        self.fs
+            .metadata(Path::new(install_path))
+            .map(|m| m.is_dir)
+            .unwrap_or(false)
     }
 }
 
@@ -149,6 +170,9 @@ mod tests {
             )
             .with_file(format!(r"{DIR}\Fortnite.item"), FORTNITE)
             .with_file(format!(r"{DIR}\Satisfactory.item"), SATISFACTORY)
+            // Install folders must exist or the scan treats them as uninstalled.
+            .with_dir(r"C:\Program Files\Epic Games\Fortnite", vec![])
+            .with_dir(r"D:\Epic\Satisfactory", vec![])
     }
 
     fn find<'g>(games: &'g [Game], external_id: &str) -> &'g Game {
@@ -189,6 +213,21 @@ mod tests {
     }
 
     #[test]
+    fn scan_skips_manifest_when_install_folder_is_gone() {
+        // The manifest is present and valid, but its install folder was never
+        // seeded (i.e. the game was uninstalled, leaving the *.item behind).
+        let fs = FakeFs::new()
+            .with_dir(DIR, vec![file_entry(&format!(r"{DIR}\Fortnite.item"))])
+            .with_file(format!(r"{DIR}\Fortnite.item"), FORTNITE);
+        // (no with_dir for C:\Program Files\Epic Games\Fortnite)
+        let games = EpicScanner::new(&fs).scan(Path::new(DIR)).unwrap();
+        assert!(
+            games.is_empty(),
+            "a manifest with a missing install folder is treated as uninstalled"
+        );
+    }
+
+    #[test]
     fn scan_returns_empty_when_manifests_dir_missing() {
         let fs = FakeFs::new();
         let games = EpicScanner::new(&fs).scan(Path::new(DIR)).unwrap();
@@ -206,7 +245,8 @@ mod tests {
                 ],
             )
             .with_file(format!(r"{DIR}\Fortnite.item"), FORTNITE)
-            .with_file(format!(r"{DIR}\Broken.item"), "{ not valid json ");
+            .with_file(format!(r"{DIR}\Broken.item"), "{ not valid json ")
+            .with_dir(r"C:\Program Files\Epic Games\Fortnite", vec![]);
         let games = EpicScanner::new(&fs).scan(Path::new(DIR)).unwrap();
         assert_eq!(games.len(), 1);
         assert_eq!(games[0].external_id, "Fortnite");

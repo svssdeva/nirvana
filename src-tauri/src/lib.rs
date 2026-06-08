@@ -29,10 +29,18 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            // Single SQLite store in the per-user app-data dir (ADR-0001).
+            // Single SQLite store in the per-user app-data dir (ADR-0001). Debug
+            // builds use a SEPARATE file so dev-only seeded dummy games (the
+            // `seed_dummy_games` command) never pollute the DB a release build
+            // reads — they share the app-data dir otherwise (same identifier).
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
-            let db = Db::open(&dir.join("nirvana.db"))?;
+            let db_file = if cfg!(debug_assertions) {
+                "nirvana-dev.db"
+            } else {
+                "nirvana.db"
+            };
+            let db = Db::open(&dir.join(db_file))?;
             app.manage(AppState::new(db));
             allow_cover_dirs(app);
             // Create the main window AFTER state is managed, never from config.

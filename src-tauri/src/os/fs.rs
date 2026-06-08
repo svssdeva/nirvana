@@ -119,8 +119,10 @@ mod fake {
                     is_reparse_point: false,
                 });
             }
-            // Otherwise find the entry among any directory's children.
-            self.dirs
+            // Prefer a child entry — it carries the real is_dir / reparse flags
+            // (so a junction listed as a child keeps its reparse bit).
+            if let Some(meta) = self
+                .dirs
                 .values()
                 .flatten()
                 .find(|e| e.path == path)
@@ -129,7 +131,20 @@ mod fake {
                     is_dir: e.is_dir,
                     is_reparse_point: e.is_reparse_point,
                 })
-                .ok_or_else(|| CoreError::NotFound(path.display().to_string()))
+            {
+                return Ok(meta);
+            }
+            // Fall back to a directory registered via `with_dir` that isn't also
+            // listed as someone's child (e.g. a top-level install root) — it
+            // still exists.
+            if self.dirs.contains_key(path) {
+                return Ok(FileMeta {
+                    len: 0,
+                    is_dir: true,
+                    is_reparse_point: false,
+                });
+            }
+            Err(CoreError::NotFound(path.display().to_string()))
         }
     }
 }
