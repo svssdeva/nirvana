@@ -35,6 +35,7 @@ CONTEXT.md
 release-build.log
 docs/ideas/
 docs/plan/
+docs/superpowers/
 
 # Mobile icon sets (Windows-only app)
 /src-tauri/icons/android/
