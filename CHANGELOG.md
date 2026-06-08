@@ -6,6 +6,20 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+### Added
+- **GOG Galaxy** as a discovered source: games are found from the Windows
+  registry (works for DRM-free installs without the Galaxy client) and enriched
+  by Galaxy's local `galaxy-2.0.db` when present — fully offline, deduped by GOG
+  product id. Launch is hybrid: the `goggalaxy://` protocol when the Galaxy
+  client is installed, otherwise a validated direct-exe spawn.
+- An extensible **multi-store framework** (a `STORES` descriptor registry) so new
+  stores are a localized addition; source badges and filter pills are now
+  **color-themed** per store (GOG = purple), driven by a `list_sources` command.
+
+### Changed
+- The library's source filter pills are data-driven (a new store appears,
+  themed, with no UI change).
+
 ## [0.1.0-alpha.3] — 2026-06-08
 
 ### Added

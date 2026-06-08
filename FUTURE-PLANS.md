@@ -14,9 +14,15 @@ Expand discovery beyond Steam / Epic / local. Each store reuses the existing
 source badge / tile accent (a per-source theme token), so the library reads at a
 glance.
 
+> ✅ **Shipped:** the extensible multi-store framework (a `STORES` descriptor
+> registry), per-source **color theming** (badges + filter pills via
+> `list_sources`), and **GOG Galaxy** (registry + `galaxy-2.0.db`, hybrid
+> `goggalaxy://`/exe launch). Each remaining store below is now a small
+> increment: enum variant + one descriptor row + one scanner.
+
 | Store | Discovery approach (offline) | Launch | Brand accent |
 |---|---|---|---|
-| **GOG Galaxy** | `galaxy-2.0.db` (SQLite) under ProgramData, or registry install paths | `goggalaxy://` or game exe | Purple `#a23fff` |
+| ~~**GOG Galaxy**~~ ✅ | ~~`galaxy-2.0.db` (SQLite) under ProgramData, or registry install paths~~ | ~~`goggalaxy://` or game exe~~ | ~~Purple `#a23fff`~~ |
 | **Xbox / Microsoft Store** | `Get-AppxPackage` / PackageManager (gaming apps), or `XboxGames` install dirs | `shell:AppsFolder\<AUMID>` | Green `#107c10` |
 | **EA app / Origin** | registry + `%PROGRAMDATA%\EA …` manifests | `origin2://` / `eadm://` | Red/Orange `#ff4747` |
 | **Ubisoft Connect** | registry `Uplay\Installs` + install dirs | `uplay://launch/<id>` | Blue `#0070ff` |
