@@ -262,6 +262,19 @@ impl Db {
         Ok(())
     }
 
+    /// Clear a game's custom cover (revert to auto-resolution). `NotFound` if no
+    /// such game.
+    pub fn clear_cover_path(&self, id: i64) -> CoreResult<()> {
+        let rows = self.conn.execute(
+            "UPDATE game SET cover_path = NULL WHERE id = ?1",
+            params![id],
+        )?;
+        if rows == 0 {
+            return Err(CoreError::NotFound(format!("game {id}")));
+        }
+        Ok(())
+    }
+
     /// Wipe the whole library: all games, tags, and settings. The schema (and
     /// `user_version`) is kept, so the DB is immediately reusable — equivalent to
     /// a fresh database. Used by the Settings "delete database" action.
@@ -691,6 +704,19 @@ mod tests {
         assert!(db
             .upsert_game(&sample_game("Celeste", r"C:\g\celeste"))
             .is_ok());
+    }
+
+    #[test]
+    fn clear_cover_path_nulls_the_column() {
+        let db = Db::open_in_memory().unwrap();
+        let id = db
+            .upsert_game(&sample_game("Hades", r"C:\g\hades"))
+            .unwrap();
+        db.set_cover_path(id, r"C:\cache\covers\custom-1.png")
+            .unwrap();
+        assert!(db.get_game(id).unwrap().unwrap().cover_path.is_some());
+        db.clear_cover_path(id).unwrap();
+        assert!(db.get_game(id).unwrap().unwrap().cover_path.is_none());
     }
 
     #[test]
