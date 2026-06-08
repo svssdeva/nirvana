@@ -4,7 +4,7 @@ import type { Game } from "../../ipc";
 import "./game-tile";
 
 /** Top-N games that have been played, most-recent first. Pure + testable. */
-export function recentlyPlayed(games: Game[], limit = 8): Game[] {
+export function recentlyPlayed(games: Game[], limit = 5): Game[] {
   return games
     .filter((g) => g.lastPlayed != null)
     .sort((a, b) => (b.lastPlayed as number) - (a.lastPlayed as number))
@@ -24,14 +24,27 @@ export class ContinueRow extends LitElement {
       font-size: 20px;
       color: var(--on-surface);
     }
+    /* Up to 5 games in a single non-scrolling row, stepping down with width to
+       match the main grid's tile size. */
     .row {
       display: grid;
-      grid-auto-flow: column;
-      grid-auto-columns: 180px;
+      grid-template-columns: repeat(5, 1fr);
       gap: 16px;
-      overflow-x: auto;
-      padding-bottom: 8px;
-      scrollbar-width: thin;
+    }
+    @media (max-width: 1400px) {
+      .row {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+    @media (max-width: 1100px) {
+      .row {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+    @media (max-width: 760px) {
+      .row {
+        grid-template-columns: repeat(2, 1fr);
+      }
     }
   `;
 

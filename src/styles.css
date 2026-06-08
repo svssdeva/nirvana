@@ -61,6 +61,8 @@
   --on-surface-muted: var(--body-dark);
   --hairline: var(--hairline-dark);
   --danger: #ff6b6b;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.34);
 }
 
 /* ── Semantic role tokens — LIGHT canvas mode ──────────────────────────── */
@@ -72,6 +74,8 @@
   --on-surface-muted: var(--body-light);
   --hairline: var(--hairline-light);
   --danger: var(--warning);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.22);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.4);
 }
 
 :root {
@@ -104,6 +108,33 @@ body {
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
+}
+
+/* Themed, slim scrollbars. The WebView is Chromium-based, so it honors both the
+   standard `scrollbar-*` properties and the `::-webkit-scrollbar` pseudo-elements.
+   The page (document) scroll lives in the light DOM, so these global rules style
+   it directly; the thumb tracks the active theme. */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: var(--rounded-full);
+  /* Transparent border insets the thumb into a slim, floating pill. */
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 /* Smooth cross-fade between top-level views (app-root wraps view switches in
