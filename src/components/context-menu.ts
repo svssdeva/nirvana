@@ -86,7 +86,7 @@ export class ContextMenu extends LitElement {
   private renderItems(items: MenuItem[]): unknown[] {
     return items.map(
       (it) => html`
-        <button class="item" ?disabled=${it.disabled} @click=${() => this.select(it)}>
+        <button class="item" role="menuitem" ?disabled=${it.disabled} @click=${() => this.select(it)}>
           <span class="check" aria-hidden="true">${it.checked ? "✓" : ""}</span>
           <span>${it.label}</span>
         </button>

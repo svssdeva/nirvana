@@ -242,13 +242,13 @@ export class LibraryView extends LitElement {
   #onChanged = () => { void this.refresh(); this.loadCollections(); };
   /** A tile's tag chip was clicked → filter by that tag. */
   #onFilterTag = (e: Event) => this.setTag((e as CustomEvent<string>).detail);
+  #onGotoSettings = () => this.store.setView("settings");
   /** Global keydown: `/` → focus search; `Escape` → clear filters. */
   #onGlobalKey = (e: KeyboardEvent): void => {
     if (e.key === "/") {
-      const active = document.activeElement;
-      const tag = active?.tagName.toLowerCase() ?? "";
       // Don't hijack focus when the user is already typing in an input/textarea.
-      if (tag === "input" || tag === "textarea") return;
+      // deepActiveTag() walks shadow roots so focus inside a shadow DOM is detected.
+      if (deepActiveTag() === "input" || deepActiveTag() === "textarea") return;
       e.preventDefault();
       const input = this.renderRoot.querySelector<HTMLInputElement>("input.search");
       input?.focus();
@@ -278,6 +278,7 @@ export class LibraryView extends LitElement {
       .catch(() => {});
     this.addEventListener("library-changed", this.#onChanged);
     this.addEventListener("filter-tag", this.#onFilterTag);
+    this.addEventListener("goto-settings", this.#onGotoSettings);
     document.addEventListener("keydown", this.#onGlobalKey);
   }
 
@@ -287,6 +288,7 @@ export class LibraryView extends LitElement {
     this.#unlisteners = [];
     this.removeEventListener("library-changed", this.#onChanged);
     this.removeEventListener("filter-tag", this.#onFilterTag);
+    this.removeEventListener("goto-settings", this.#onGotoSettings);
     document.removeEventListener("keydown", this.#onGlobalKey);
     clearTimeout(this.#searchTimer);
   }
@@ -584,6 +586,16 @@ export class LibraryView extends LitElement {
     }
     return html`<game-grid .games=${this.games} density=${this.layout}></game-grid>`;
   }
+}
+
+/** Walk shadow roots to find the deepest active element's tag name.
+ * `document.activeElement` only returns the shadow HOST when focus is inside
+ * a shadow root, which causes the `/`-key guard to miss inputs inside other
+ * components' shadow DOM. */
+function deepActiveTag(): string {
+  let el: Element | null = document.activeElement;
+  while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+  return el?.tagName.toLowerCase() ?? "";
 }
 
 function readLayout(): Density {

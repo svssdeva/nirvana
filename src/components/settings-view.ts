@@ -414,6 +414,7 @@ export class SettingsView extends LitElement {
   private async addCollection(): Promise<void> {
     const name = this.newCollName.trim();
     if (!name) return;
+    this.collErr = "";
     try {
       await createCollection(name);
       this.newCollName = "";
@@ -427,6 +428,7 @@ export class SettingsView extends LitElement {
   private async renameCollection_(id: number, name: string): Promise<void> {
     const n = name.trim();
     if (!n) return;
+    this.collErr = "";
     try {
       await renameCollection(id, n);
       this.renamingId = null;
@@ -439,6 +441,7 @@ export class SettingsView extends LitElement {
   }
 
   private async deleteCollection_(id: number): Promise<void> {
+    this.collErr = "";
     try {
       await deleteCollection(id);
       this.confirmDeleteId = null;

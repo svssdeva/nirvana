@@ -15,7 +15,6 @@ import {
   listCollections,
   gameCollections,
   setGameCollections,
-  createCollection,
 } from "../../ipc";
 import { formatBytes, tagHue } from "../../format";
 import type { MenuItem } from "../context-menu";
@@ -476,6 +475,7 @@ export class GameTile extends LitElement {
     ];
     if (this.game.source === "steam") items.push({ id: "uninstall", label: "Uninstall" });
     const m = menu();
+    m.removeEventListener("menu-select", this.onMenuSelect);
     m.addEventListener("menu-select", this.onMenuSelect, { once: true } as AddEventListenerOptions);
     m.openAt(x, y, items);
   }
@@ -513,21 +513,7 @@ export class GameTile extends LitElement {
       }
     } else if (id.startsWith("col:")) {
       if (id === "col:new") {
-        try {
-          const name = prompt("New collection name")?.trim();
-          if (name) {
-            const [cols2, mine2] = await Promise.all([
-              listCollections().catch(() => [] as import("../../ipc").Collection[]),
-              gameCollections(this.game.id).catch(() => [] as number[]),
-            ]);
-            void cols2; // loaded for context; we only need the id
-            const newId = await createCollection(name);
-            await setGameCollections(this.game.id, [...mine2, newId]);
-            this.notifyChanged();
-          }
-        } catch {
-          // best-effort
-        }
+        this.dispatchEvent(new CustomEvent("goto-settings", { bubbles: true, composed: true }));
       } else {
         try {
           const mine2 = await gameCollections(this.game.id).catch(() => [] as number[]);
