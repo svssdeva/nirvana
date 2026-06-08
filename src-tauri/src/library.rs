@@ -32,6 +32,10 @@ pub struct LibraryQuery {
     pub favorites_only: bool,
     #[serde(default)]
     pub tag: Option<String>,
+    /// Only games in this collection id (resolved in `get_library`, not here —
+    /// membership needs the DB, so `apply_query` ignores it).
+    #[serde(default)]
+    pub collection: Option<i64>,
     #[serde(default)]
     pub sort: SortBy,
     #[serde(default)]

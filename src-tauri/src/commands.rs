@@ -96,11 +96,20 @@ pub fn get_library(
     state: State<'_, AppState>,
     query: Option<LibraryQuery>,
 ) -> CommandResult<Vec<Game>> {
-    let games = {
-        let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
-        db.list_games()?
-    };
-    Ok(library::apply_query(games, &query.unwrap_or_default()))
+    Ok(get_library_inner(&state, query)?)
+}
+
+/// Testable core: load, optionally narrow to a collection's members, then apply
+/// the in-memory query (source/drive/favorites/tag/search/sort).
+fn get_library_inner(state: &AppState, query: Option<LibraryQuery>) -> CoreResult<Vec<Game>> {
+    let q = query.unwrap_or_default();
+    let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+    let mut games = db.list_games()?;
+    if let Some(cid) = q.collection {
+        let members = db.collection_member_ids(cid)?;
+        games.retain(|g| members.contains(&g.id));
+    }
+    Ok(library::apply_query(games, &q))
 }
 
 /// Store metadata (id, display name, brand color) for one source — the frontend
@@ -917,6 +926,25 @@ mod tests {
     use super::*;
     use crate::error::ErrorKind;
 
+    /// Minimal `Game` suitable for DB upsert in unit tests.
+    fn game_row(name: &str, path: &str) -> crate::models::Game {
+        crate::models::Game {
+            id: 0,
+            source: crate::models::Source::Steam,
+            external_id: "x".into(),
+            name: name.into(),
+            install_path: path.into(),
+            exe_path: None,
+            size_bytes: None,
+            drive: None,
+            last_played: None,
+            launch_count: 0,
+            cover_path: None,
+            favorite: false,
+            tags: Vec::new(),
+        }
+    }
+
     #[test]
     fn ping_ok_returns_pong() {
         assert_eq!(ping(false).unwrap(), "pong");
@@ -938,5 +966,23 @@ mod tests {
             .any(|i| i.source == "gog" && i.color == "#a23fff"));
         // Every store exposes a hex color the UI can theme with.
         assert!(infos.iter().all(|i| i.color.starts_with('#')));
+    }
+
+    #[test]
+    fn get_library_filters_by_collection() {
+        use crate::state::AppState;
+        let db = crate::db::Db::open_in_memory().unwrap();
+        let keep = db.upsert_game(&game_row("Keep", r"C:\g\keep")).unwrap();
+        let _drop = db.upsert_game(&game_row("Drop", r"C:\g\drop")).unwrap();
+        let c = db.create_collection("Mine").unwrap();
+        db.set_game_collections(keep, &[c]).unwrap();
+        let state = AppState::new(db);
+        let q = LibraryQuery {
+            collection: Some(c),
+            ..Default::default()
+        };
+        let games = get_library_inner(&state, Some(q)).unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].name, "Keep");
     }
 }
