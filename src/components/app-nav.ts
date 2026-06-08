@@ -1,7 +1,8 @@
 import { LitElement, html, css } from "lit";
-import { customElement } from "lit/decorators.js";
+import { customElement, state } from "lit/decorators.js";
 import { consume } from "@lit/context";
 import { Store, storeContext, type View } from "../store";
+import { win } from "../ipc";
 
 const ITEMS: ReadonlyArray<{ view: View; label: string }> = [
   { view: "library", label: "Library" },
@@ -32,10 +33,14 @@ export class AppNav extends LitElement {
       display: flex;
       align-items: center;
       gap: 24px;
-      height: 64px;
-      padding: 0 48px;
+      height: 56px;
+      /* No right padding — the window controls sit flush in the corner. */
+      padding: 0 0 0 48px;
       background: var(--bg);
       border-bottom: 1px solid var(--hairline);
+      /* It doubles as the OS title bar (decorations off) — don't select its text. */
+      user-select: none;
+      -webkit-user-select: none;
     }
     .wordmark {
       font-family: var(--font-display);
@@ -91,9 +96,43 @@ export class AppNav extends LitElement {
       font-size: 16px;
       line-height: 1;
     }
+    /* Custom window controls (title bar). Flush to the top-right corner. */
+    .winctls {
+      display: flex;
+      align-self: stretch;
+      margin-left: 8px;
+    }
+    .winctl {
+      width: 46px;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--on-surface-muted);
+      cursor: default;
+    }
+    .winctl svg {
+      width: 11px;
+      height: 11px;
+    }
+    .winctl:hover {
+      background: var(--surface-elevated);
+      color: var(--on-surface);
+    }
+    .winctl.close:hover {
+      background: #e81123;
+      color: #fff;
+    }
+    .winctl:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: -2px;
+    }
     @media (max-width: 768px) {
       nav {
-        padding: 0 24px;
+        padding-left: 24px;
         gap: 12px;
       }
       .toggle .label {
@@ -105,26 +144,63 @@ export class AppNav extends LitElement {
   @consume({ context: storeContext, subscribe: true })
   private store!: Store;
 
+  /** Whether the window is maximized (drives the restore/maximize glyph). */
+  @state() private maximized = false;
+
   #unsubscribe?: () => void;
+  #unlistenResized?: () => void;
 
   connectedCallback() {
     super.connectedCallback();
     // `store` is injected by @consume by the time we're connected. Re-render
     // on view/theme changes. Torn down in disconnectedCallback to avoid leaks.
     this.#unsubscribe = this.store.subscribe(() => this.requestUpdate());
+    void this.trackMaximize();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
+    this.#unlistenResized?.();
+    this.#unlistenResized = undefined;
+  }
+
+  /** Keep the maximize/restore glyph in sync with the window state. */
+  private async trackMaximize(): Promise<void> {
+    try {
+      this.maximized = await win.isMaximized();
+      const unlisten = await win.onResized(async () => {
+        this.maximized = await win.isMaximized();
+      });
+      if (this.isConnected) this.#unlistenResized = unlisten;
+      else unlisten();
+    } catch {
+      // not in a Tauri window context — controls simply won't reflect state
+    }
+  }
+
+  /** Drag the window from empty title-bar areas (ignore clicks on controls). */
+  private onDragStart(e: PointerEvent): void {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    void win.startDragging().catch(() => {});
+  }
+
+  private onTitleDblClick(e: MouseEvent): void {
+    if ((e.target as HTMLElement).closest("button")) return;
+    void win.toggleMaximize().catch(() => {});
   }
 
   render() {
     const active = this.store.view;
     const isDark = this.store.theme === "dark";
     return html`
-      <nav aria-label="Primary">
+      <nav
+        aria-label="Primary"
+        @pointerdown=${this.onDragStart}
+        @dblclick=${this.onTitleDblClick}
+      >
         <span class="wordmark">Nirvana<span class="alpha">alpha</span></span>
         <div class="pills">
           ${ITEMS.map(
@@ -147,6 +223,28 @@ export class AppNav extends LitElement {
           <span class="glyph" aria-hidden="true">${isDark ? "☾" : "☀"}</span>
           <span class="label">${isDark ? "Dark" : "Light"}</span>
         </button>
+        <div class="winctls">
+          <button class="winctl" aria-label="Minimize" title="Minimize" @click=${() => win.minimize()}>
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5 h10" stroke="currentColor" stroke-width="1" /></svg>
+          </button>
+          <button
+            class="winctl"
+            aria-label=${this.maximized ? "Restore" : "Maximize"}
+            title=${this.maximized ? "Restore" : "Maximize"}
+            @click=${() => win.toggleMaximize()}
+          >
+            ${this.maximized
+              ? html`<svg viewBox="0 0 10 10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1">
+                  <rect x="0.5" y="2.5" width="6" height="6" /><path d="M2.5 2.5 V0.5 H8.5 V6.5 H6.5" />
+                </svg>`
+              : html`<svg viewBox="0 0 10 10" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1">
+                  <rect x="0.5" y="0.5" width="9" height="9" />
+                </svg>`}
+          </button>
+          <button class="winctl close" aria-label="Close" title="Close" @click=${() => win.close()}>
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0 L10 10 M10 0 L0 10" stroke="currentColor" stroke-width="1" /></svg>
+          </button>
+        </div>
       </nav>
     `;
   }

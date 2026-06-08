@@ -137,6 +137,20 @@ export function appVersion(): Promise<string> {
 }
 
 /**
+ * Window controls for the custom (borderless) title bar — drag, the min/max/close
+ * buttons, and maximize-state tracking. Keeps `@tauri-apps/api/window` behind the
+ * ipc seam like everything else.
+ */
+export const win = {
+  minimize: () => getCurrentWindow().minimize(),
+  toggleMaximize: () => getCurrentWindow().toggleMaximize(),
+  close: () => getCurrentWindow().close(),
+  startDragging: () => getCurrentWindow().startDragging(),
+  isMaximized: () => getCurrentWindow().isMaximized(),
+  onResized: (cb: () => void): Promise<UnlistenFn> => getCurrentWindow().onResized(cb),
+};
+
+/**
  * Reveal the (initially hidden) main window and close the splashscreen window.
  * Called once the UI has painted. Best-effort: each step is independently
  * guarded so a missing splash window or permission never blocks the app.
