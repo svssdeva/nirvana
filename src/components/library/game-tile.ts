@@ -110,11 +110,18 @@ export class GameTile extends LitElement {
         transition: none;
       }
     }
-    img {
+    img.cover {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
+    }
+    img.cover.icon {
+      /* Small extracted icons: contain + center on the dark card, don't stretch. */
+      object-fit: contain;
+      width: 56%;
+      height: 56%;
+      margin: auto;
     }
     .placeholder {
       width: 100%;
@@ -263,6 +270,13 @@ export class GameTile extends LitElement {
       font-size: 20px;
       color: rgba(255, 255, 255, 0.32);
     }
+    .lthumb img.cover.icon {
+      /* Icons in the list thumbnail: contained + centered, not stretched. */
+      object-fit: contain;
+      width: 56%;
+      height: 56%;
+      margin: auto;
+    }
     .linfo {
       min-width: 0;
       display: flex;
@@ -324,6 +338,8 @@ export class GameTile extends LitElement {
 
   /** Resolved asset URL for the cover, or null while loading / on placeholder. */
   @state() private src: string | null = null;
+  /** Kind of the resolved cover — drives object-fit treatment in the template. */
+  @state() private coverKind: "image" | "icon" | "none" = "none";
   /** True while a launch is in flight (blocks double-launch, shows a status). */
   @state() private launching = false;
   /** Transient launch-failure message, auto-cleared. */
@@ -432,12 +448,25 @@ export class GameTile extends LitElement {
 
   private async loadCover(): Promise<void> {
     const id = this.game.id;
-    this.src = this.game.coverPath ? coverSrc(this.game.coverPath) : null;
-    if (this.src) return;
+    if (this.game.coverPath) {
+      this.src = coverSrc(this.game.coverPath);
+      this.coverKind = "image";
+      return;
+    }
+    this.src = null;
+    this.coverKind = "none";
     try {
       const ref = await getCover(id);
       // Guard against a stale response after the tile was rebound.
-      if (this.game.id === id && ref.type === "image") this.src = coverSrc(ref.path);
+      if (this.game.id !== id) return;
+      if (ref.type === "placeholder") {
+        this.src = null;
+        this.coverKind = "none";
+      } else {
+        // Both "image" and "icon" have a path — coverSrc works for both.
+        this.src = coverSrc(ref.path);
+        this.coverKind = ref.type; // "image" | "icon"
+      }
     } catch {
       // Keep the placeholder; covers are best-effort.
     }
@@ -562,7 +591,7 @@ export class GameTile extends LitElement {
         <button class="lmain" aria-label=${label} aria-busy=${this.launching ? "true" : "false"} @click=${this.launch}>
           <span class="lthumb">
             ${this.src
-              ? html`<img src=${this.src} alt="" />`
+              ? html`<img class="cover ${this.coverKind === "icon" ? "icon" : ""}" src=${this.src} alt="" />`
               : html`<span class="placeholder" aria-hidden="true">▤</span>`}
           </span>
           <span class="linfo">
@@ -614,7 +643,7 @@ export class GameTile extends LitElement {
         >
           <span class="badge" style=${this.badgeStyle(source)}>${SOURCE_LABEL[source]}</span>
           ${this.src
-            ? html`<img src=${this.src} alt="" />`
+            ? html`<img class="cover ${this.coverKind === "icon" ? "icon" : ""}" src=${this.src} alt="" />`
             : html`<div class="placeholder" aria-hidden="true">▤</div>`}
           <div class="meta">
             <span class="name" title=${name}>${name}</span>
