@@ -338,6 +338,55 @@ impl Db {
         Ok(games)
     }
 
+    /// All collections, name-ordered (position reserved for future ordering).
+    pub fn list_collections(&self) -> CoreResult<Vec<crate::models::Collection>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, name FROM collection ORDER BY position, name")?;
+        let rows = stmt.query_map([], |r| {
+            Ok(crate::models::Collection {
+                id: r.get(0)?,
+                name: r.get(1)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Create a collection; returns its id. Trims the name; rejects blank.
+    /// A duplicate name violates UNIQUE and surfaces as a `Db` error.
+    pub fn create_collection(&self, name: &str) -> CoreResult<i64> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CoreError::Parse("collection name is empty".into()));
+        }
+        self.conn
+            .execute("INSERT INTO collection (name) VALUES (?1)", params![name])?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Rename a collection. `NotFound` if no such id.
+    pub fn rename_collection(&self, id: i64, name: &str) -> CoreResult<()> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CoreError::Parse("collection name is empty".into()));
+        }
+        let n = self.conn.execute(
+            "UPDATE collection SET name=?1 WHERE id=?2",
+            params![name, id],
+        )?;
+        if n == 0 {
+            return Err(CoreError::NotFound(format!("collection {id}")));
+        }
+        Ok(())
+    }
+
+    /// Delete a collection (membership rows cascade away).
+    pub fn delete_collection(&self, id: i64) -> CoreResult<()> {
+        self.conn
+            .execute("DELETE FROM collection WHERE id=?1", params![id])?;
+        Ok(())
+    }
+
     /// All game→tag-names in one query, grouped by game id.
     fn all_tags(&self) -> CoreResult<std::collections::HashMap<i64, Vec<String>>> {
         let mut stmt = self.conn.prepare(
@@ -720,6 +769,37 @@ mod tests {
             .unwrap();
         assert_eq!(id1, id2, "trailing separator should not create a duplicate");
         assert_eq!(db.list_games().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn collection_crud_roundtrips() {
+        let db = Db::open_in_memory().unwrap();
+        let id = db.create_collection("RPGs").unwrap();
+        assert!(id > 0);
+        let all = db.list_collections().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].name, "RPGs");
+        db.rename_collection(id, "Role-playing").unwrap();
+        assert_eq!(db.list_collections().unwrap()[0].name, "Role-playing");
+        db.delete_collection(id).unwrap();
+        assert!(db.list_collections().unwrap().is_empty());
+    }
+
+    #[test]
+    fn create_collection_rejects_blank_and_duplicate() {
+        let db = Db::open_in_memory().unwrap();
+        assert!(db.create_collection("  ").is_err());
+        db.create_collection("Fav").unwrap();
+        assert!(db.create_collection("Fav").is_err(), "UNIQUE name");
+    }
+
+    #[test]
+    fn rename_missing_collection_is_not_found() {
+        let db = Db::open_in_memory().unwrap();
+        assert!(matches!(
+            db.rename_collection(999, "X").unwrap_err(),
+            CoreError::NotFound(_)
+        ));
     }
 
     #[test]

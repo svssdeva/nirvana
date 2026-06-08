@@ -60,6 +60,14 @@ pub struct Game {
     pub tags: Vec<String>,
 }
 
+/// A user-curated, named group of games (Priority 2).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Collection {
+    pub id: i64,
+    pub name: String,
+}
+
 /// A storage volume, queried live (never persisted — system-design §3). Sizes in
 /// bytes as `i64` for lossless JS interop (consistent with `Game.size_bytes`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
