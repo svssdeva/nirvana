@@ -856,6 +856,40 @@ pub fn set_steamgriddb_key(key: String) -> CommandResult<()> {
     }
 }
 
+/// Resolve a hero using the real OS adapters (Windows-only; other targets have no
+/// Steam cache → placeholder).
+#[cfg(windows)]
+fn resolve_hero_for(_app: &AppHandle, game: &Game) -> CoverRef {
+    use crate::os::fs::WindowsFs;
+    use crate::os::registry::WindowsRegistry;
+    use crate::scan::steam::find_steam_root;
+    use std::path::PathBuf;
+    let steam_root = find_steam_root(&WindowsRegistry)
+        .ok()
+        .flatten()
+        .map(PathBuf::from);
+    art::resolve_hero(game, &WindowsFs, steam_root.as_deref())
+}
+
+#[cfg(not(windows))]
+fn resolve_hero_for(_app: &AppHandle, _game: &Game) -> CoverRef {
+    CoverRef::Placeholder
+}
+
+/// Resolve a game's landscape hero art for the featured banner. Lazy; never
+/// errors — returns the placeholder variant when nothing's cached.
+#[tauri::command]
+pub fn get_hero(app: AppHandle, state: State<'_, AppState>, id: i64) -> CommandResult<CoverRef> {
+    let game = {
+        let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
+        db.get_game(id)?
+    };
+    let Some(game) = game else {
+        return Ok(CoverRef::Placeholder);
+    };
+    Ok(resolve_hero_for(&app, &game))
+}
+
 /// Resolve a cover using the real OS adapters. Windows-only; other targets have
 /// no adapters and always yield a placeholder (the app ships on Windows).
 #[cfg(windows)]

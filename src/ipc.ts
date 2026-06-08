@@ -349,6 +349,11 @@ export function getCover(id: number): Promise<CoverRef> {
   return call<CoverRef>("get_cover", { id });
 }
 
+/** Resolve a game's landscape hero art (for the featured banner). */
+export function getHero(id: number): Promise<CoverRef> {
+  return call<CoverRef>("get_hero", { id });
+}
+
 /**
  * Turn a backend cover file path into a WebView-loadable URL via Tauri's asset
  * protocol (the CSP allows `asset:`; the dir is scoped at startup). Keeping

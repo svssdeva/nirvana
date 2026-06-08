@@ -65,6 +65,7 @@ pub fn run() {
             commands::set_game_collections,
             commands::game_collections,
             commands::get_cover,
+            commands::get_hero,
             commands::launch_game,
             commands::get_donation_info,
             commands::list_drives,
