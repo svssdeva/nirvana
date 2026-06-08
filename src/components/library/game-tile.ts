@@ -10,8 +10,16 @@ import {
   setTags,
   sources,
   toAppError,
+  openInstallFolder,
+  uninstallGame,
+  listCollections,
+  gameCollections,
+  setGameCollections,
+  createCollection,
 } from "../../ipc";
 import { formatBytes, tagHue } from "../../format";
+import type { MenuItem } from "../context-menu";
+import { ContextMenu } from "../context-menu";
 
 const SOURCE_LABEL: Record<Source, string> = {
   steam: "Steam",
@@ -19,6 +27,17 @@ const SOURCE_LABEL: Record<Source, string> = {
   local: "Local",
   gog: "GOG",
 };
+
+// ── Shared singleton context menu ────────────────────────────────────────────
+// One <context-menu> is appended to document.body and reused across all tiles.
+let menuEl: ContextMenu | undefined;
+function menu(): ContextMenu {
+  if (!menuEl) {
+    menuEl = document.createElement("context-menu") as ContextMenu;
+    document.body.appendChild(menuEl);
+  }
+  return menuEl;
+}
 
 /**
  * A single game thumbnail — the `game-tile` from design.md §Components: a
@@ -186,16 +205,6 @@ export class GameTile extends LitElement {
     .chip:focus-visible {
       outline: 2px solid var(--primary);
       outline-offset: 2px;
-    }
-    .tag-edit {
-      border: 1px solid var(--hairline);
-      background: none;
-      color: var(--on-surface-muted);
-      border-radius: var(--rounded-full);
-      width: 22px;
-      height: 22px;
-      cursor: pointer;
-      line-height: 1;
     }
     .tag-input {
       width: 100%;
@@ -431,12 +440,115 @@ export class GameTile extends LitElement {
     }
   }
 
+  // ── Context menu ────────────────────────────────────────────────────────────
+
+  /** Right-click / Shift+F10 handler — prevent default browser menu then open ours. */
+  private onContextMenu = (e: MouseEvent): void => {
+    e.preventDefault();
+    void this.openMenuAt(e.clientX, e.clientY);
+  };
+
+  /**
+   * PUBLIC so keyboard-nav (Task 9/Shift+F10) can call it without coordinates.
+   * Loads collections + this game's memberships, builds the MenuItem tree, then
+   * opens the singleton menu.
+   */
+  async openMenuAt(x: number, y: number): Promise<void> {
+    const [cols, mine] = await Promise.all([
+      listCollections().catch(() => [] as import("../../ipc").Collection[]),
+      gameCollections(this.game.id).catch(() => [] as number[]),
+    ]);
+    const mineSet = new Set(mine);
+    const items: MenuItem[] = [
+      { id: "launch", label: "Launch" },
+      { id: "folder", label: "Open folder" },
+      { id: "favorite", label: this.game.favorite ? "Unfavorite" : "Favorite" },
+      { id: "cover", label: "Set cover" },
+      { id: "tags", label: "Edit tags" },
+      {
+        id: "collections",
+        label: "Add to collection",
+        submenu: [
+          ...cols.map((c) => ({ id: `col:${c.id}`, label: c.name, checked: mineSet.has(c.id) })),
+          { id: "col:new", label: "New collection…" },
+        ],
+      },
+    ];
+    if (this.game.source === "steam") items.push({ id: "uninstall", label: "Uninstall" });
+    const m = menu();
+    m.addEventListener("menu-select", this.onMenuSelect, { once: true } as AddEventListenerOptions);
+    m.openAt(x, y, items);
+  }
+
+  /** Handles item selection from the context menu. Arrow field for stable `this`. */
+  private onMenuSelect = async (e: Event): Promise<void> => {
+    const id = (e as CustomEvent<string>).detail;
+
+    if (id === "launch") {
+      void this.launch();
+    } else if (id === "folder") {
+      try {
+        await openInstallFolder(this.game.id);
+      } catch (err) {
+        this.launchError = toAppError(err).message;
+        this.#errorTimer = setTimeout(() => (this.launchError = null), 4000);
+      }
+    } else if (id === "favorite") {
+      try {
+        await setFavorite(this.game.id, !this.game.favorite);
+        this.notifyChanged();
+      } catch {
+        // best-effort
+      }
+    } else if (id === "cover") {
+      await this.setCustomCover();
+      this.notifyChanged();
+    } else if (id === "tags") {
+      this.editingTags = true;
+    } else if (id === "uninstall") {
+      try {
+        await uninstallGame(this.game.id);
+      } catch {
+        // best-effort; uninstall opens Steam's own dialog
+      }
+    } else if (id.startsWith("col:")) {
+      if (id === "col:new") {
+        try {
+          const name = prompt("New collection name")?.trim();
+          if (name) {
+            const [cols2, mine2] = await Promise.all([
+              listCollections().catch(() => [] as import("../../ipc").Collection[]),
+              gameCollections(this.game.id).catch(() => [] as number[]),
+            ]);
+            void cols2; // loaded for context; we only need the id
+            const newId = await createCollection(name);
+            await setGameCollections(this.game.id, [...mine2, newId]);
+            this.notifyChanged();
+          }
+        } catch {
+          // best-effort
+        }
+      } else {
+        try {
+          const mine2 = await gameCollections(this.game.id).catch(() => [] as number[]);
+          const mineSet2 = new Set(mine2);
+          const cid = Number(id.slice(4));
+          const next = mineSet2.has(cid) ? mine2.filter((x) => x !== cid) : [...mine2, cid];
+          await setGameCollections(this.game.id, next);
+          this.notifyChanged();
+        } catch {
+          // best-effort
+        }
+      }
+    }
+  };
+
   render() {
     return this.list ? this.renderList() : this.renderGrid();
   }
 
-  /** Shared tag chips + edit/cover buttons (used by both layouts). */
-  private renderTagControls(name: string, tags: string[]) {
+  /** Shared tag chips (used by both layouts). The ✎ and 🖼 buttons are gone — actions live in the context menu now. */
+  private renderTagControls(tags: string[]) {
     return html`
       ${tags.map(
         (t) => html`<button
@@ -448,12 +560,6 @@ export class GameTile extends LitElement {
           ${t}
         </button>`,
       )}
-      <button class="tag-edit" @click=${() => (this.editingTags = true)} title="Edit tags" aria-label="Edit tags for ${name}">
-        ✎
-      </button>
-      <button class="tag-edit" @click=${this.setCustomCover} title="Set custom cover" aria-label="Set a custom cover for ${name}">
-        🖼
-      </button>
     `;
   }
 
@@ -462,7 +568,7 @@ export class GameTile extends LitElement {
     const size = formatBytes(sizeBytes);
     const label = `Launch ${name} — ${SOURCE_LABEL[source]}${size ? `, ${size}` : ""}`;
     return html`
-      <div class="lrow">
+      <div class="lrow" @contextmenu=${this.onContextMenu}>
         <button class="lmain" aria-label=${label} aria-busy=${this.launching ? "true" : "false"} @click=${this.launch}>
           <span class="lthumb">
             ${this.src
@@ -488,7 +594,7 @@ export class GameTile extends LitElement {
         >
           ${favorite ? "★" : "☆"}
         </button>
-        <div class="lactions">${this.renderTagControls(name, tags)}</div>
+        <div class="lactions">${this.renderTagControls(tags)}</div>
       </div>
       ${this.editingTags
         ? html`<input
@@ -509,7 +615,7 @@ export class GameTile extends LitElement {
     const size = formatBytes(sizeBytes);
     const label = `Launch ${name} — ${SOURCE_LABEL[source]}${size ? `, ${size}` : ""}`;
     return html`
-      <div class="wrap">
+      <div class="wrap" @contextmenu=${this.onContextMenu}>
         <button
           class="tile"
           aria-label=${label}
@@ -540,7 +646,7 @@ export class GameTile extends LitElement {
         >
           ${favorite ? "★" : "☆"}
         </button>
-        <div class="tags">${this.renderTagControls(name, tags)}</div>
+        <div class="tags">${this.renderTagControls(tags)}</div>
         ${this.editingTags
           ? html`<input
               class="tag-input"
