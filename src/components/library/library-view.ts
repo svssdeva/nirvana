@@ -7,6 +7,8 @@ import type { Density } from "./game-grid";
 import "../view-page";
 import "../empty-state";
 import "./game-grid";
+import "./continue-row";
+import { recentlyPlayed } from "./continue-row";
 
 const LAYOUT_KEY = "nirvana-layout";
 
@@ -382,6 +384,11 @@ export class LibraryView extends LitElement {
             : nothing}
         </div>
         ${this.renderFilters()}
+        ${!this.hasActiveFilter() && this.games.length
+          ? html`<div class="body" style="padding-bottom:0">
+              <continue-row .games=${recentlyPlayed(this.games)}></continue-row>
+            </div>`
+          : nothing}
         <div class="body">${this.renderBody()}</div>
       </view-page>
     `;
