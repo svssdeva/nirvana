@@ -6,6 +6,20 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+### Added
+- **Featured hero banner** at the top of the library spotlighting the
+  most-recently-played game — landscape Steam hero art (`library_hero.jpg`) when
+  available, an on-brand gradient otherwise, with an inline Play CTA.
+- Per-game **Regenerate art** (always) and **Clear custom cover** (when a custom
+  cover is set) in the context menu — Regenerate drops the cached exe icon so it
+  is re-extracted; Clear removes the custom cover and falls back to the resolved
+  art (Steam capsule → exe icon → placeholder).
+
+### Changed
+- Covers sourced from an extracted **exe icon** now render *contained* (centered,
+  ~56% of the tile) on a card instead of being stretched edge-to-edge like real
+  capsule art — a `CoverRef::Icon` kind distinguishes the two.
+
 ## [0.1.0-alpha.4] — 2026-06-08
 
 ### Added
