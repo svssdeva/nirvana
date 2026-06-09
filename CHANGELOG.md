@@ -6,6 +6,17 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Local games with a deeply-nested executable now appear.** The watch-folder
+  scanner only looked one directory deep, so titles whose binary lives under
+  engine/arch subfolders (e.g. `Game\…\Binaries\Win64\Game.exe` for Unreal
+  games, or `Game\game\Game.exe`) were silently missed. It now searches up to
+  four levels (skipping reparse points and redistributable/uninstall subtrees),
+  names each game after its **folder** instead of a picked exe stem (so
+  "Resident Evil Requiem", not "re9"; "Neverness To Everness", not
+  "NTEGlobalLauncher"), prefers an exe matching the folder name, and filters
+  bootstrapper/helper/cheat-trainer executables out of the results.
+
 ## [0.1.0-alpha.5] — 2026-06-09
 
 ### Added

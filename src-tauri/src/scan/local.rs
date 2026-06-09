@@ -1,15 +1,21 @@
 //! Local / non-store game discovery (plan Task 13, M1).
 //!
-//! Source: **user-configured watch folders** (Settings → "Watch folders"),
-//! scanned for `.exe`s — top level plus one directory deep (the common
-//! `Folder\Game\Game.exe` layout), skipping reparse points to avoid junction
-//! loops/double-counting.
+//! Source: **user-configured watch folders** (Settings → "Watch folders").
+//! Each immediate **subfolder** of a watch folder is treated as one game, named
+//! after the folder; its executable is found by a **bounded depth-first search**
+//! (up to [`MAX_FOLDER_DEPTH`] levels), because real installs nest the binary
+//! under engine/arch subfolders — e.g. `Game\Binaries\Win64\Game.exe` (Unreal),
+//! `Game\game\Game.exe`, not just `Game\Game.exe`. Loose top-level `.exe`s are
+//! also surfaced (portable games). Reparse points are skipped (junction
+//! loops/double-counting), as are redistributable/uninstall subtrees, and
+//! installer/runtime/helper/trainer exes are filtered (see [`is_game_exe`]) so we
+//! surface games, not setup utilities.
 //!
 //! We intentionally do **not** enumerate the Windows Uninstall registry: it
 //! lists *every* installed program (browsers, tools, runtimes…), which a
 //! keyword filter can't reliably separate from games — it produced false
 //! positives. Watch folders are user-curated, so what shows up is what the user
-//! points at. Steam/Epic cover store games; this covers manual/portable installs.
+//! points at. Steam/Epic/GOG cover store games; this covers manual/portable installs.
 //!
 //! Launching a local game spawns its exe via argv with path validation
 //! (`launch::validate_local_exe`, threat-model TB3).
@@ -19,6 +25,12 @@ use crate::models::{Game, Source};
 use crate::os::FileSystem;
 use crate::scan::drive_of;
 use std::path::{Path, PathBuf};
+
+/// How many directory levels below a watch-folder subfolder we search for the
+/// game exe. The common Unreal layout `Game\<Title>\Binaries\Win64\Game.exe`
+/// puts the binary 3 levels deep, so one level (the old behaviour) missed it; 4
+/// covers that while bounding the walk on pathological trees.
+const MAX_FOLDER_DEPTH: usize = 4;
 
 /// Discovers local games from watch folders via the [`FileSystem`] seam.
 pub struct LocalScanner<'a> {
@@ -40,10 +52,9 @@ impl<'a> LocalScanner<'a> {
         Ok(games)
     }
 
-    /// Scan one watch folder: top-level game `.exe`s plus, for each immediate
-    /// subfolder, a single best game exe. Reparse points are skipped (junction
-    /// loops/double-counting); installer/runtime/crash-handler exes are filtered
-    /// out (see [`is_game_exe`]) so we surface games, not setup utilities.
+    /// Scan one watch folder: each immediate subfolder is one game (named after
+    /// the folder, exe found by deep search), plus any loose top-level game
+    /// `.exe`. Reparse points are skipped.
     fn scan_watch_dir(&self, dir: &Path, games: &mut Vec<Game>) {
         let Ok(entries) = self.fs.read_dir(dir) else {
             return;
@@ -53,54 +64,77 @@ impl<'a> LocalScanner<'a> {
                 continue;
             }
             if !entry.is_dir {
+                // Loose portable exe at the watch root: name from the exe stem
+                // (there's no game folder to name it after).
                 if is_game_exe(&entry.path) {
-                    games.push(local_exe_game(dir, &entry.path));
+                    games.push(local_game(exe_stem_name(&entry.path), dir, &entry.path));
                 }
                 continue;
             }
-            // One main exe per subfolder (the common `Folder\Game\Game.exe`).
+            // A subfolder is one game named after the folder; its exe may sit
+            // several levels deep (engine/arch subfolders).
             if let Some(exe) = self.pick_folder_exe(&entry.path) {
-                games.push(local_exe_game(&entry.path, &exe));
+                games.push(local_game(folder_name(&entry.path), &entry.path, &exe));
             }
         }
     }
 
-    /// Choose the single most game-like `.exe` in `folder`: prefer one whose name
-    /// matches the folder (e.g. `Hollow Knight\hollow_knight.exe`), else the first
-    /// non-utility exe. `None` if the folder has no plausible game exe.
+    /// Choose the single most game-like `.exe` anywhere under `folder` (bounded to
+    /// [`MAX_FOLDER_DEPTH`]). Prefer one whose name matches the folder (e.g.
+    /// `PRAGMATA\PRAGMATA.exe`, `Mafia\…\Win64\Mafia.exe`), else the **shallowest**
+    /// non-utility exe (a top-level `Launcher.exe` beats a deep helper). `None` if
+    /// the folder has no plausible game exe.
     fn pick_folder_exe(&self, folder: &Path) -> Option<PathBuf> {
-        let Ok(children) = self.fs.read_dir(folder) else {
-            return None;
-        };
-        let candidates: Vec<PathBuf> = children
-            .into_iter()
-            .filter(|c| !c.is_dir && !c.is_reparse_point && is_game_exe(&c.path))
-            .map(|c| c.path)
-            .collect();
-        let folder_key = folder
-            .file_name()
-            .and_then(|s| s.to_str())
-            .map(name_key)
-            .filter(|k| !k.is_empty());
-        if let Some(key) = folder_key {
-            if let Some(matched) = candidates.iter().find(|p| {
-                p.file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(name_key)
-                    .as_deref()
-                    == Some(&key)
-            }) {
-                return Some(matched.clone());
+        let mut candidates: Vec<(usize, PathBuf)> = Vec::new();
+        self.collect_exes(folder, 0, &mut candidates);
+
+        let folder_key = name_key_of(folder);
+        if !folder_key.is_empty() {
+            // Folder-name match wins at any depth (shallowest such, stable order).
+            if let Some((_, p)) = candidates
+                .iter()
+                .filter(|(_, p)| stem_key(p) == folder_key)
+                .min_by_key(|(depth, _)| *depth)
+            {
+                return Some(p.clone());
             }
         }
-        candidates.into_iter().next()
+        // Else the shallowest candidate (ties keep first-seen / scanner order).
+        candidates
+            .into_iter()
+            .min_by_key(|(depth, _)| *depth)
+            .map(|(_, p)| p)
+    }
+
+    /// Depth-first collect of game `.exe`s under `dir`, tagged with their depth
+    /// (files directly in `dir` are depth 0). Skips reparse points and
+    /// redistributable/uninstall subtrees, and stops descending past
+    /// [`MAX_FOLDER_DEPTH`].
+    fn collect_exes(&self, dir: &Path, depth: usize, out: &mut Vec<(usize, PathBuf)>) {
+        let Ok(entries) = self.fs.read_dir(dir) else {
+            return;
+        };
+        for entry in entries {
+            if entry.is_reparse_point {
+                continue;
+            }
+            if entry.is_dir {
+                if depth + 1 <= MAX_FOLDER_DEPTH && !is_skippable_dir(&entry.path) {
+                    self.collect_exes(&entry.path, depth + 1, out);
+                }
+            } else if is_game_exe(&entry.path) {
+                out.push((depth, entry.path));
+            }
+        }
     }
 }
 
 /// Substrings (in a lowercased exe stem) that mark a non-game executable:
-/// installers, redistributables, crash handlers, anti-cheat bootstrappers. Kept
-/// specific (`crashhandler`, not `crash`) so real titles like "Crash Bandicoot"
-/// aren't filtered.
+/// installers, redistributables, crash handlers, anti-cheat/EOS bootstrappers,
+/// launch helpers, and cheat trainers. Kept specific (`crashhandler`, not
+/// `crash`) so real titles like "Crash Bandicoot" aren't filtered. Note: a
+/// folder-name match still wins over this list, so a game whose own exe happens
+/// to contain one of these tokens is still found by name.
 const NON_GAME_EXE: &[&str] = &[
     "unins",
     "uninstall",
@@ -122,6 +156,24 @@ const NON_GAME_EXE: &[&str] = &[
     "touchup",
     "easyanticheat",
     "battleye",
+    "bootstrapper",
+    "helper",
+    "trainer",
+];
+
+/// Lowercased names of subdirectories we never descend into: redistributable
+/// payloads and uninstall data. Skipping them bounds the walk and keeps a stray
+/// bundled installer exe from ever being considered. (Engine/`Binaries`/`Win64`
+/// are NOT here — real game exes live there.)
+const SKIP_DIRS: &[&str] = &[
+    "_commonredist",
+    "commonredist",
+    "redist",
+    "vcredist",
+    "directx",
+    "dotnet",
+    "_uninstall",
+    "uninstall",
 ];
 
 /// A `.exe` that looks like a game (not an installer/runtime/helper).
@@ -137,6 +189,16 @@ fn is_game_exe(path: &Path) -> bool {
     !NON_GAME_EXE.iter().any(|token| stem.contains(token))
 }
 
+/// Whether to skip recursing into a directory (redist/uninstall payloads).
+fn is_skippable_dir(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    SKIP_DIRS.iter().any(|d| name == *d)
+}
+
 /// Lowercased, alphanumeric-only key for fuzzy name matching (so "Hollow Knight"
 /// ≈ "hollow_knight" ≈ "HollowKnight").
 fn name_key(s: &str) -> String {
@@ -146,14 +208,44 @@ fn name_key(s: &str) -> String {
         .collect()
 }
 
-/// A `Game` built from a discovered exe in a watch folder. `install_path` is the
-/// containing folder; `external_id` is the full exe path (a stable unique key).
-fn local_exe_game(folder: &Path, exe: &Path) -> Game {
-    let name = exe
-        .file_stem()
+/// Fuzzy key of a path's final component (folder name).
+fn name_key_of(path: &Path) -> String {
+    path.file_name()
+        .and_then(|s| s.to_str())
+        .map(name_key)
+        .unwrap_or_default()
+}
+
+/// Fuzzy key of an exe's file stem.
+fn stem_key(path: &Path) -> String {
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .map(name_key)
+        .unwrap_or_default()
+}
+
+/// Display name for a game folder (the folder's own name, as the user sees it in
+/// Explorer — far better than a picked exe stem like `re9` or `Launcher`).
+fn folder_name(folder: &Path) -> String {
+    folder
+        .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("Unknown")
-        .to_string();
+        .to_string()
+}
+
+/// Display name for a loose top-level exe (its file stem — no folder to name it).
+fn exe_stem_name(exe: &Path) -> String {
+    exe.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Unknown")
+        .to_string()
+}
+
+/// A `Game` built from a discovered exe. `install_path` is the game's folder
+/// (the watch folder itself for a loose top-level exe); `external_id` is the full
+/// exe path (a stable unique key).
+fn local_game(name: String, folder: &Path, exe: &Path) -> Game {
     Game {
         id: 0,
         source: Source::Local,
@@ -225,7 +317,7 @@ mod tests {
     }
 
     #[test]
-    fn filters_installers_and_picks_one_main_exe_per_folder() {
+    fn filters_installers_and_names_game_after_its_folder() {
         let watch = r"D:\Games";
         let fs = FakeFs::new()
             .with_dir(
@@ -253,8 +345,174 @@ mod tests {
         let names: Vec<&str> = games.iter().map(|g| g.name.as_str()).collect();
         assert_eq!(
             names,
-            ["hollow_knight"],
-            "only the game exe, no installers/helpers"
+            ["Hollow Knight"],
+            "named after the folder, not the exe stem; installers/helpers filtered"
+        );
+        assert_eq!(
+            games[0].exe_path.as_deref(),
+            Some(r"D:\Games\Hollow Knight\hollow_knight.exe")
+        );
+    }
+
+    #[test]
+    fn finds_exe_nested_several_levels_deep() {
+        // Real Unreal layout: Watch\Mafia\MafiaTheOldCountry\Binaries\Win64\Mafia.exe
+        let watch = r"D:\Games";
+        let fs = FakeFs::new()
+            .with_dir(watch, vec![entry(r"D:\Games\Mafia", true, false)])
+            .with_dir(
+                r"D:\Games\Mafia",
+                vec![
+                    entry(r"D:\Games\Mafia\MafiaTheOldCountry", true, false),
+                    entry(r"D:\Games\Mafia\Uninstall", true, false),
+                ],
+            )
+            .with_dir(
+                r"D:\Games\Mafia\MafiaTheOldCountry",
+                vec![entry(r"D:\Games\Mafia\MafiaTheOldCountry\Binaries", true, false)],
+            )
+            .with_dir(
+                r"D:\Games\Mafia\MafiaTheOldCountry\Binaries",
+                vec![entry(
+                    r"D:\Games\Mafia\MafiaTheOldCountry\Binaries\Win64",
+                    true,
+                    false,
+                )],
+            )
+            .with_dir(
+                r"D:\Games\Mafia\MafiaTheOldCountry\Binaries\Win64",
+                vec![
+                    entry(
+                        r"D:\Games\Mafia\MafiaTheOldCountry\Binaries\Win64\Mafia.exe",
+                        false,
+                        false,
+                    ),
+                    entry(
+                        r"D:\Games\Mafia\MafiaTheOldCountry\Binaries\Win64\CrashReportClient.exe",
+                        false,
+                        false,
+                    ),
+                ],
+            )
+            // The uninstall subtree must be skipped, even though it holds an exe.
+            .with_dir(
+                r"D:\Games\Mafia\Uninstall",
+                vec![entry(r"D:\Games\Mafia\Uninstall\unins000.exe", false, false)],
+            );
+        let games = LocalScanner::new(&fs)
+            .scan(&[PathBuf::from(watch)])
+            .unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].name, "Mafia");
+        assert_eq!(games[0].install_path, r"D:\Games\Mafia");
+        assert_eq!(
+            games[0].exe_path.as_deref(),
+            Some(r"D:\Games\Mafia\MafiaTheOldCountry\Binaries\Win64\Mafia.exe"),
+            "the deep game exe, not the crash reporter or the uninstaller"
+        );
+    }
+
+    #[test]
+    fn folder_name_match_beats_a_shallower_helper() {
+        // A launcher sits at the top; the real game (matching the folder) is one
+        // level down. The name match should win over the shallower launcher.
+        let watch = r"D:\Games";
+        let fs = FakeFs::new()
+            .with_dir(watch, vec![entry(r"D:\Games\LumenTale", true, false)])
+            .with_dir(
+                r"D:\Games\LumenTale",
+                vec![entry(r"D:\Games\LumenTale\game", true, false)],
+            )
+            .with_dir(
+                r"D:\Games\LumenTale\game",
+                vec![
+                    entry(r"D:\Games\LumenTale\game\EOSBootstrapper.exe", false, false),
+                    entry(r"D:\Games\LumenTale\game\LumenTale.exe", false, false),
+                ],
+            );
+        let games = LocalScanner::new(&fs)
+            .scan(&[PathBuf::from(watch)])
+            .unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].name, "LumenTale");
+        assert_eq!(
+            games[0].exe_path.as_deref(),
+            Some(r"D:\Games\LumenTale\game\LumenTale.exe")
+        );
+    }
+
+    #[test]
+    fn picks_shallowest_when_no_name_match() {
+        // No exe matches the folder name → the shallowest non-utility exe (the
+        // top-level launcher) is the launch target.
+        let watch = r"D:\Games";
+        let fs = FakeFs::new()
+            .with_dir(watch, vec![entry(r"D:\Games\Neverness", true, false)])
+            .with_dir(
+                r"D:\Games\Neverness",
+                vec![
+                    entry(r"D:\Games\Neverness\NTEGlobalLauncher.exe", false, false),
+                    entry(r"D:\Games\Neverness\uninst.exe", false, false),
+                    entry(r"D:\Games\Neverness\NTEGlobal", true, false),
+                ],
+            )
+            .with_dir(
+                r"D:\Games\Neverness\NTEGlobal",
+                vec![entry(
+                    r"D:\Games\Neverness\NTEGlobal\NTEGlobalGame.exe",
+                    false,
+                    false,
+                )],
+            );
+        let games = LocalScanner::new(&fs)
+            .scan(&[PathBuf::from(watch)])
+            .unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].name, "Neverness");
+        assert_eq!(
+            games[0].exe_path.as_deref(),
+            Some(r"D:\Games\Neverness\NTEGlobalLauncher.exe"),
+            "shallowest exe wins; the deep one is not preferred"
+        );
+    }
+
+    #[test]
+    fn loose_top_level_trainer_exe_is_not_a_game() {
+        let watch = r"D:\Games";
+        let fs = FakeFs::new().with_dir(
+            watch,
+            vec![entry(
+                r"D:\Games\PRAGMATA v1.0 Plus 27 Trainer.exe",
+                false,
+                false,
+            )],
+        );
+        let games = LocalScanner::new(&fs)
+            .scan(&[PathBuf::from(watch)])
+            .unwrap();
+        assert!(games.is_empty(), "cheat trainers are not games");
+    }
+
+    #[test]
+    fn subfolder_with_only_redist_yields_no_game() {
+        let watch = r"D:\Games";
+        let fs = FakeFs::new()
+            .with_dir(watch, vec![entry(r"D:\Games\Thing", true, false)])
+            .with_dir(
+                r"D:\Games\Thing",
+                vec![entry(r"D:\Games\Thing\_CommonRedist", true, false)],
+            )
+            // Skipped dir — its exe (even with a game-ish name) must never be picked.
+            .with_dir(
+                r"D:\Games\Thing\_CommonRedist",
+                vec![entry(r"D:\Games\Thing\_CommonRedist\Thing.exe", false, false)],
+            );
+        let games = LocalScanner::new(&fs)
+            .scan(&[PathBuf::from(watch)])
+            .unwrap();
+        assert!(
+            games.is_empty(),
+            "redist subtree is skipped, so no exe is found"
         );
     }
 
