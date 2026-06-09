@@ -1,6 +1,6 @@
 [package]
 name = "nirvana"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 description = "Nirvana — offline unified game launcher for Windows (Steam/Epic/local)"
 authors = ["svssdeva"]
 edition = "2021"

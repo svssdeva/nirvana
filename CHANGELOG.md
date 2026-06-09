@@ -6,6 +6,8 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] — 2026-06-09
+
 ### Added
 - **Featured hero banner** at the top of the library spotlighting the
   most-recently-played game — landscape Steam hero art (`library_hero.jpg`) when
