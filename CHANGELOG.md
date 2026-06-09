@@ -6,6 +6,8 @@ All notable changes to **Nirvana** are recorded here. Format follows
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1] — 2026-06-09
+
 ### Fixed
 - **Local games with a deeply-nested executable now appear.** The watch-folder
   scanner only looked one directory deep, so titles whose binary lives under
