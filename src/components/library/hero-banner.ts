@@ -61,8 +61,11 @@ export class HeroBanner extends LitElement {
 
   private async loadArt(): Promise<void> {
     this.art = null;
+    const id = this.game.id;
     try {
-      const ref = await getHero(this.game.id);
+      const ref = await getHero(id);
+      // Guard against a stale response if the featured game changed mid-flight.
+      if (this.game.id !== id) return;
       if (ref.type === "image") this.art = coverSrc(ref.path);
     } catch {
       /* best-effort: keep the gradient */
