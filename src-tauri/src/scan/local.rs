@@ -119,7 +119,7 @@ impl<'a> LocalScanner<'a> {
                 continue;
             }
             if entry.is_dir {
-                if depth + 1 <= MAX_FOLDER_DEPTH && !is_skippable_dir(&entry.path) {
+                if depth < MAX_FOLDER_DEPTH && !is_skippable_dir(&entry.path) {
                     self.collect_exes(&entry.path, depth + 1, out);
                 }
             } else if is_game_exe(&entry.path) {
@@ -369,7 +369,11 @@ mod tests {
             )
             .with_dir(
                 r"D:\Games\Mafia\MafiaTheOldCountry",
-                vec![entry(r"D:\Games\Mafia\MafiaTheOldCountry\Binaries", true, false)],
+                vec![entry(
+                    r"D:\Games\Mafia\MafiaTheOldCountry\Binaries",
+                    true,
+                    false,
+                )],
             )
             .with_dir(
                 r"D:\Games\Mafia\MafiaTheOldCountry\Binaries",
@@ -397,7 +401,11 @@ mod tests {
             // The uninstall subtree must be skipped, even though it holds an exe.
             .with_dir(
                 r"D:\Games\Mafia\Uninstall",
-                vec![entry(r"D:\Games\Mafia\Uninstall\unins000.exe", false, false)],
+                vec![entry(
+                    r"D:\Games\Mafia\Uninstall\unins000.exe",
+                    false,
+                    false,
+                )],
             );
         let games = LocalScanner::new(&fs)
             .scan(&[PathBuf::from(watch)])
@@ -505,7 +513,11 @@ mod tests {
             // Skipped dir — its exe (even with a game-ish name) must never be picked.
             .with_dir(
                 r"D:\Games\Thing\_CommonRedist",
-                vec![entry(r"D:\Games\Thing\_CommonRedist\Thing.exe", false, false)],
+                vec![entry(
+                    r"D:\Games\Thing\_CommonRedist\Thing.exe",
+                    false,
+                    false,
+                )],
             );
         let games = LocalScanner::new(&fs)
             .scan(&[PathBuf::from(watch)])
