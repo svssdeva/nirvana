@@ -462,6 +462,19 @@ export class SettingsView extends LitElement {
     await this.persist("monitorIntervalMs", String(ms));
   }
 
+  private async toggleStore(source: string, event: Event): Promise<void> {
+    const enabled = (event.target as HTMLInputElement).checked;
+    if (this.settings) {
+      this.settings = {
+        ...this.settings,
+        stores: this.settings.stores.map((st) =>
+          st.source === source ? { ...st, enabled } : st,
+        ),
+      };
+    }
+    await this.persist(`store.${source}.enabled`, enabled ? "true" : "false");
+  }
+
   private async toggleSteamGridDb(event: Event): Promise<void> {
     const enabled = (event.target as HTMLInputElement).checked;
     if (this.settings) this.settings = { ...this.settings, steamgriddbEnabled: enabled };
@@ -765,6 +778,33 @@ export class SettingsView extends LitElement {
             />
             <button class="fpill" @click=${this.addFolder}>Add</button>
           </div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Stores to scan</span>
+          ${(s?.stores ?? []).map(
+            (st) => html`
+              <label class="switch">
+                <input
+                  type="checkbox"
+                  ?checked=${st.enabled}
+                  @change=${(e: Event) => this.toggleStore(st.source, e)}
+                />
+                <span class="track"></span>
+                <span>
+                  <span
+                    aria-hidden="true"
+                    style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:${st.color}"
+                  ></span>
+                  ${st.display}
+                </span>
+              </label>
+            `,
+          )}
+          <p class="warn">
+            Disabling a store skips it on the next scan. Games already in your
+            library stay until you scan again — nothing is deleted.
+          </p>
         </div>
 
         <div class="field">

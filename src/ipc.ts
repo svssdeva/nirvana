@@ -42,7 +42,7 @@ export function toAppError(e: unknown): AppError {
 }
 
 // ── Domain types (mirror models.rs serde camelCase) ──────────────────────────
-export type Source = "steam" | "epic" | "local" | "gog";
+export type Source = "steam" | "epic" | "local" | "gog" | "xbox" | "ubisoft" | "ea";
 
 /** Store metadata for theming badges/filters (mirrors the `SourceInfo` command). */
 export interface SourceInfo {
@@ -282,12 +282,21 @@ export function uninstallGame(id: number): Promise<void> {
   return call<void>("uninstall_game", { id });
 }
 
+/** A store + whether it's enabled for scanning (mirrors `StoreState`). */
+export interface StoreState {
+  source: Source;
+  display: string;
+  color: string;
+  enabled: boolean;
+}
+
 /** DB-backed preferences (mirrors the `Settings` command struct). */
 export interface Settings {
   monitorIntervalMs: number;
   watchFolders: string[];
   steamgriddbEnabled: boolean;
   onboarded: boolean;
+  stores: StoreState[];
 }
 
 /** Read all persisted settings (with defaults). */

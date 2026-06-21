@@ -14,12 +14,15 @@
 //! (its games are simply absent) — it never aborts the whole scan; likewise an
 //! individual row that fails to persist is skipped, not fatal.
 
+pub mod ea;
 pub mod epic;
 pub mod gog;
 pub mod local;
 pub mod steam;
 pub mod store;
+pub mod ubisoft;
 pub mod vdf;
+pub mod xbox;
 
 use crate::db::{self, Db};
 use crate::error::{CoreError, CoreResult};

@@ -1,0 +1,17 @@
+# Ignore images and icons
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.bmp
+*.tiff
+*.webp
+
+# Ignore external skills library
+agentic-skills/
+
+# Ignore IDE settings
+.vscode/
+.idea/
+.claude/

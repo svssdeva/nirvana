@@ -18,7 +18,7 @@ dist-ssr
 
 # Vendored skills library (own git repo; reference only, see CLAUDE.md)
 /agentic-skills/
-
+.agents/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -41,3 +41,4 @@ docs/superpowers/
 /src-tauri/icons/android/
 /src-tauri/icons/ios/
 docs/adr/
+/graphify-out/

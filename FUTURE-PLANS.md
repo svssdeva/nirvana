@@ -16,16 +16,18 @@ glance.
 
 > ✅ **Shipped:** the extensible multi-store framework (a `STORES` descriptor
 > registry), per-source **color theming** (badges + filter pills via
-> `list_sources`), and **GOG Galaxy** (registry + `galaxy-2.0.db`, hybrid
-> `goggalaxy://`/exe launch). Each remaining store below is now a small
-> increment: enum variant + one descriptor row + one scanner.
+> `list_sources`), **GOG Galaxy**, **Xbox/MS Store** (AppX seam, ADR-0006),
+> **Ubisoft Connect**, and **EA app/Origin** (registry spine). Each remaining
+> store below is now a small increment: enum variant + one descriptor row + one
+> scanner. *(Xbox/Ubisoft/EA: code complete + unit-tested; live verification on a
+> real install still pending.)*
 
 | Store | Discovery approach (offline) | Launch | Brand accent |
 |---|---|---|---|
 | ~~**GOG Galaxy**~~ ✅ | ~~`galaxy-2.0.db` (SQLite) under ProgramData, or registry install paths~~ | ~~`goggalaxy://` or game exe~~ | ~~Purple `#a23fff`~~ |
-| **Xbox / Microsoft Store** | `Get-AppxPackage` / PackageManager (gaming apps), or `XboxGames` install dirs | `shell:AppsFolder\<AUMID>` | Green `#107c10` |
-| **EA app / Origin** | registry + `%PROGRAMDATA%\EA …` manifests | `origin2://` / `eadm://` | Red/Orange `#ff4747` |
-| **Ubisoft Connect** | registry `Uplay\Installs` + install dirs | `uplay://launch/<id>` | Blue `#0070ff` |
+| ~~**Xbox / Microsoft Store**~~ ✅ | ~~WinRT PackageManager, `XboxGames` install dirs (`os/appx.rs`)~~ | ~~`shell:AppsFolder\<AUMID>`~~ | ~~Green `#107c10`~~ |
+| ~~**EA app / Origin**~~ ✅ | ~~registry `Origin Games` spine (manifests deferred)~~ | ~~`origin2://game/launch`~~ | ~~Red/Orange `#ff4747`~~ |
+| ~~**Ubisoft Connect**~~ ✅ | ~~registry `Launcher\Installs` + install dirs~~ | ~~`uplay://launch/<id>/0`~~ | ~~Blue `#0070ff`~~ |
 | **Battle.net** | `.battle.net` product DB / registry | `battlenet://<game>` | Blue `#00aeff` |
 | **itch.io** | `butler`/app DB under appdata | app protocol or exe | Pink `#fa5c5c` |
 | **Riot** | registry / RiotClientInstalls.json | RiotClient args | Red `#d13639` |
@@ -89,4 +91,6 @@ Work items:
 
 ---
 
-*Have an idea? Open an issue. Priority 1 (more stores) is the next focus.*
+*Have an idea? Open an issue. Priority 1: 4 of 7 expansion stores shipped
+(GOG, Xbox, Ubisoft, EA — on top of base Steam/Epic/local); Battle.net, itch.io,
+and Riot remain on the same playbook.*

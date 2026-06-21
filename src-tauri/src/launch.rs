@@ -62,6 +62,51 @@ pub fn gog_launch_url(product_id: &str) -> CoreResult<String> {
     Ok(format!("goggalaxy://openGameView/{product_id}"))
 }
 
+/// Build the EA app / Origin launch URL for a content/offer id. The id is
+/// validated to a safe charset (alphanumerics plus `._-:`, e.g.
+/// `"OFB-EAST:109552316"`) before interpolation (TB2) so a crafted registry
+/// value can't inject extra query params or path segments.
+pub fn origin_url(content_id: &str) -> CoreResult<String> {
+    let safe = !content_id.is_empty()
+        && content_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b':'));
+    if !safe {
+        return Err(CoreError::Parse(format!(
+            "invalid ea content id: {content_id:?}"
+        )));
+    }
+    Ok(format!("origin2://game/launch?offerIds={content_id}"))
+}
+
+/// Build the Ubisoft Connect (Uplay) run URL for a game id. Same digit-only
+/// validation as [`steam_launch_url`] (TB2) so a crafted registry value can't
+/// smuggle extra path segments. The trailing `/0` is Uplay's launch index.
+pub fn uplay_url(game_id: &str) -> CoreResult<String> {
+    if game_id.is_empty() || !game_id.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(CoreError::Parse(format!(
+            "invalid uplay game id: {game_id:?}"
+        )));
+    }
+    Ok(format!("uplay://launch/{game_id}/0"))
+}
+
+/// Build the shell launch string for a packaged Store/Xbox app from its AUMID
+/// (`<PackageFamilyName>!<AppId>`), opened via the shell's `AppsFolder` (never by
+/// spawning a binary — TB3). The AUMID is validated to a safe charset before
+/// interpolation (TB2) — letters, digits, and `._-!` only, no spaces/slashes —
+/// so a crafted value can't smuggle extra arguments or path segments.
+pub fn shell_app_url(aumid: &str) -> CoreResult<String> {
+    let safe = !aumid.is_empty()
+        && aumid
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'!'));
+    if !safe {
+        return Err(CoreError::Parse(format!("invalid aumid: {aumid:?}")));
+    }
+    Ok(format!(r"shell:AppsFolder\{aumid}"))
+}
+
 /// Whether the GOG Galaxy client is installed: its registry path is present AND
 /// the referenced client executable exists on disk. Drives the hybrid launch
 /// choice (protocol vs. direct exe). Takes the [`Registry`] seam so it's testable
@@ -176,6 +221,52 @@ mod tests {
         assert!(gog_launch_url("abc").is_err());
         assert!(gog_launch_url("12 && calc").is_err());
         assert!(gog_launch_url("12/../x").is_err());
+    }
+
+    #[test]
+    fn builds_origin_url() {
+        assert_eq!(
+            origin_url("OFB-EAST:109552316").unwrap(),
+            "origin2://game/launch?offerIds=OFB-EAST:109552316"
+        );
+        assert!(origin_url("1234567890").is_ok());
+    }
+
+    #[test]
+    fn rejects_unsafe_ea_content_id() {
+        assert!(origin_url("").is_err());
+        assert!(origin_url("id&evil=1").is_err()); // query injection
+        assert!(origin_url("id with space").is_err());
+        assert!(origin_url("id/../x").is_err());
+    }
+
+    #[test]
+    fn builds_uplay_url() {
+        assert_eq!(uplay_url("3159").unwrap(), "uplay://launch/3159/0");
+    }
+
+    #[test]
+    fn rejects_unsafe_uplay_game_id() {
+        assert!(uplay_url("").is_err());
+        assert!(uplay_url("abc").is_err());
+        assert!(uplay_url("3159 && calc").is_err());
+        assert!(uplay_url("3159/../x").is_err());
+    }
+
+    #[test]
+    fn builds_shell_app_url() {
+        assert_eq!(
+            shell_app_url("Microsoft.Halo_8wekyb3d8bbwe!App").unwrap(),
+            r"shell:AppsFolder\Microsoft.Halo_8wekyb3d8bbwe!App"
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_aumid() {
+        assert!(shell_app_url("").is_err());
+        assert!(shell_app_url("App && calc").is_err()); // space + shell op
+        assert!(shell_app_url(r"App\..\evil").is_err()); // backslash path segment
+        assert!(shell_app_url("App/x").is_err()); // forward slash
     }
 
     #[test]

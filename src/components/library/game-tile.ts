@@ -31,6 +31,9 @@ const SOURCE_LABEL: Record<Source, string> = {
   epic: "Epic",
   local: "Local",
   gog: "GOG",
+  xbox: "Xbox",
+  ubisoft: "Ubisoft",
+  ea: "EA",
 };
 
 // ── Shared singleton context menu ────────────────────────────────────────────
@@ -531,12 +534,7 @@ export class GameTile extends LitElement {
         this.#errorTimer = setTimeout(() => (this.launchError = null), 4000);
       }
     } else if (id === "favorite") {
-      try {
-        await setFavorite(this.game.id, !this.game.favorite);
-        this.notifyChanged();
-      } catch {
-        // best-effort
-      }
+      void this.toggleFavorite();
     } else if (id === "cover") {
       await this.setCustomCover();
       this.notifyChanged();

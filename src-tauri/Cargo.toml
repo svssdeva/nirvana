@@ -87,6 +87,15 @@ windows = { version = "0.58", features = [
     "Win32_Graphics_Gdi",
     "Win32_System_Performance",
     "Win32_Graphics_Dxgi",
+    # AppX/MSIX game discovery (os/appx.rs): WinRT PackageManager + app-list
+    # entries, run on an MTA thread via COM. Offline — enumerates installed
+    # packages only, no network.
+    "Win32_System_Com",
+    "Foundation",
+    "Foundation_Collections",
+    "ApplicationModel",
+    "ApplicationModel_Core",
+    "Management_Deployment",
 ] }
 # Safe WMI wrapper for GPU model/driver (Win32_VideoController) — FR-GPU Task 16.
 wmi = "0.14"

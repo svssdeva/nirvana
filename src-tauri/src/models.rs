@@ -5,13 +5,16 @@ use crate::error::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
 
 /// Where a game came from. Exactly one of these.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Source {
     Steam,
     Epic,
     Local,
     Gog,
+    Xbox,
+    Ubisoft,
+    Ea,
 }
 
 impl Source {
@@ -22,6 +25,9 @@ impl Source {
             Source::Epic => "epic",
             Source::Local => "local",
             Source::Gog => "gog",
+            Source::Xbox => "xbox",
+            Source::Ubisoft => "ubisoft",
+            Source::Ea => "ea",
         }
     }
 
@@ -32,6 +38,9 @@ impl Source {
             "epic" => Ok(Source::Epic),
             "local" => Ok(Source::Local),
             "gog" => Ok(Source::Gog),
+            "xbox" => Ok(Source::Xbox),
+            "ubisoft" => Ok(Source::Ubisoft),
+            "ea" => Ok(Source::Ea),
             other => Err(CoreError::Parse(format!("unknown source: {other}"))),
         }
     }
@@ -121,7 +130,15 @@ mod tests {
 
     #[test]
     fn source_roundtrips_through_str() {
-        for s in [Source::Steam, Source::Epic, Source::Local, Source::Gog] {
+        for s in [
+            Source::Steam,
+            Source::Epic,
+            Source::Local,
+            Source::Gog,
+            Source::Xbox,
+            Source::Ubisoft,
+            Source::Ea,
+        ] {
             assert_eq!(Source::parse(s.as_str()).unwrap(), s);
         }
     }

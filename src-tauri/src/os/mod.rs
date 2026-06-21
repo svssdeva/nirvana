@@ -1,6 +1,6 @@
 //! OS access behind trait seams (ADR-0005).
 //!
-//! Each concern (registry, filesystem, WMI, PDH) is a trait with a real
+//! Each concern (registry, filesystem, WMI, AppX) is a trait with a real
 //! Windows implementation (`#[cfg(windows)]`) and an in-memory fake (`#[cfg(test)]`).
 //! Scanners/sizers/art take these traits by injection, so their parse/dedup
 //! logic is unit-tested against fakes on any OS, and the real impls are the
@@ -8,15 +8,15 @@
 
 use std::path::PathBuf;
 
+pub mod appx;
 pub mod fs;
 pub mod icon;
-pub mod pdh;
 pub mod registry;
 pub mod wmi;
 
+pub use appx::Appx;
 pub use fs::FileSystem;
 pub use icon::{IconExtractor, IconRgba};
-pub use pdh::Pdh;
 pub use registry::Registry;
 pub use wmi::Wmi;
 

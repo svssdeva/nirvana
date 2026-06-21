@@ -61,11 +61,11 @@ pub fn scan_library(
 ) -> CommandResult<Vec<Game>> {
     tracing::info!(full, "library scan starting");
     // Read user-configured watch folders before scanning (released immediately).
-    let watch_folders = {
+    let (watch_folders, enabled) = {
         let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
-        read_watch_folders(&db)
+        (read_watch_folders(&db), enabled_sources(&db))
     };
-    let results = scan_all_sources(watch_folders);
+    let results = scan_all_sources(watch_folders, &enabled);
     let events = TauriScanEvents { app };
     // Don't hold the lock across the (blocking) scan above — only for persistence.
     // Recover from a poisoned lock: a panic in another command shouldn't brick
@@ -121,6 +121,47 @@ pub struct SourceInfo {
     pub source: String,
     pub display: String,
     pub color: String,
+}
+
+/// A store plus whether the user has it enabled for scanning (Settings UI).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreState {
+    pub source: String,
+    pub display: String,
+    pub color: String,
+    pub enabled: bool,
+}
+
+/// Setting key gating whether a store is scanned. Absent = enabled (default on).
+fn store_enabled_key(source: Source) -> String {
+    format!("store.{}.enabled", source.as_str())
+}
+
+/// Whether a store is enabled for scanning (default: yes, unless set to "false").
+fn store_enabled(db: &crate::db::Db, source: Source) -> bool {
+    db.get_setting(&store_enabled_key(source))
+        .ok()
+        .flatten()
+        .as_deref()
+        != Some("false")
+}
+
+/// Sources the user hasn't disabled — the set the scan actually runs.
+fn enabled_sources(db: &crate::db::Db) -> std::collections::HashSet<Source> {
+    scan::store::STORES
+        .iter()
+        .map(|d| d.source)
+        .filter(|&s| store_enabled(db, s))
+        .collect()
+}
+
+/// Whether `key` is a `store.<source>.enabled` key for a registered source —
+/// the dynamic settings keys `set_setting` accepts beyond `KNOWN_SETTINGS` (TB2).
+fn is_store_enabled_key(key: &str) -> bool {
+    key.strip_prefix("store.")
+        .and_then(|rest| rest.strip_suffix(".enabled"))
+        .is_some_and(|s| Source::parse(s).is_ok())
 }
 
 /// Pure projection of the store registry (testable without Tauri `State`).
@@ -240,6 +281,25 @@ pub fn launch_game(app: AppHandle, state: State<'_, AppState>, id: i64) -> Comma
                 .open_url(url, None::<&str>)
                 .map_err(|e| CoreError::Io(std::io::Error::other(e.to_string())))?;
         }
+        Source::Xbox => {
+            let url = launch::shell_app_url(&game.external_id)?;
+            // Open the packaged app via the shell's AppsFolder; never spawn (TB3).
+            app.opener()
+                .open_url(url, None::<&str>)
+                .map_err(|e| CoreError::Io(std::io::Error::other(e.to_string())))?;
+        }
+        Source::Ubisoft => {
+            let url = launch::uplay_url(&game.external_id)?;
+            app.opener()
+                .open_url(url, None::<&str>)
+                .map_err(|e| CoreError::Io(std::io::Error::other(e.to_string())))?;
+        }
+        Source::Ea => {
+            let url = launch::origin_url(&game.external_id)?;
+            app.opener()
+                .open_url(url, None::<&str>)
+                .map_err(|e| CoreError::Io(std::io::Error::other(e.to_string())))?;
+        }
         Source::Local => launch_local(&game)?,
         Source::Gog => launch_gog(&app, &game)?,
     }
@@ -346,6 +406,8 @@ pub struct Settings {
     watch_folders: Vec<String>,
     steamgriddb_enabled: bool,
     onboarded: bool,
+    /// Every store + whether it's enabled for scanning (Settings toggles).
+    stores: Vec<StoreState>,
 }
 
 /// Keys `set_setting` accepts — validated at the boundary (TB2).
@@ -372,18 +434,28 @@ pub fn get_settings(state: State<'_, AppState>) -> CommandResult<Settings> {
         .unwrap_or_default();
     let steamgriddb_enabled = db.get_setting("steamgriddbEnabled")?.as_deref() == Some("true");
     let onboarded = db.get_setting("onboarded")?.as_deref() == Some("true");
+    let stores = scan::store::STORES
+        .iter()
+        .map(|d| StoreState {
+            source: d.source.as_str().to_string(),
+            display: d.display.to_string(),
+            color: d.color.to_string(),
+            enabled: store_enabled(&db, d.source),
+        })
+        .collect();
     Ok(Settings {
         monitor_interval_ms,
         watch_folders,
         steamgriddb_enabled,
         onboarded,
+        stores,
     })
 }
 
 /// Persist a single setting. Rejects unknown keys (TB2 boundary validation).
 #[tauri::command]
 pub fn set_setting(state: State<'_, AppState>, key: String, value: String) -> CommandResult<()> {
-    if !KNOWN_SETTINGS.contains(&key.as_str()) {
+    if !KNOWN_SETTINGS.contains(&key.as_str()) && !is_store_enabled_key(&key) {
         return Err(CoreError::Unsupported(format!("unknown setting: {key}")).into());
     }
     let db = state.db.lock().unwrap_or_else(|p| p.into_inner());
@@ -838,9 +910,12 @@ fn dummy_games() -> Vec<(Game, Vec<String>)> {
                 Source::Steam => (100_000 + (i as u32) * 10).to_string(),
                 Source::Epic => format!("Fake{}", slug.replace(' ', "")),
                 Source::Local => format!(r"{install}\game.exe"),
-                // Dummy sources only cycle Steam/Epic/Local (i % 3), so this is
+                // Dummy sources only cycle Steam/Epic/Local (i % 3), so these are
                 // unreachable in practice — present only for exhaustiveness.
                 Source::Gog => (1_200_000_000 + (i as u32)).to_string(),
+                Source::Xbox => format!("Fake.{}_8wekyb3d8bbwe!App", slug.replace(' ', "")),
+                Source::Ubisoft => (3_000 + (i as u32)).to_string(),
+                Source::Ea => format!("OFB-FAKE:{}", 100_000 + (i as u32)),
             };
             let exe_path = matches!(source, Source::Local).then(|| format!(r"{install}\game.exe"));
             // Every 9th has an unknown size; others range ~2–112 GB.
@@ -967,16 +1042,20 @@ fn resolve_cover_for(_app: &AppHandle, _game: &Game) -> CoverRef {
 #[cfg(windows)]
 fn scan_all_sources(
     watch_folders: Vec<std::path::PathBuf>,
+    enabled: &std::collections::HashSet<Source>,
 ) -> Vec<(Source, CoreResult<Vec<Game>>)> {
+    use crate::os::appx::WindowsAppx;
     use crate::os::fs::WindowsFs;
     use crate::os::registry::WindowsRegistry;
     use crate::scan::store::{ScanCtx, STORES};
 
     let reg = WindowsRegistry;
     let fs = WindowsFs;
+    let appx = WindowsAppx;
     let ctx = ScanCtx {
         registry: &reg,
         fs: &fs,
+        appx: &appx,
         watch_folders: &watch_folders,
         epic_dir: epic_manifests_dir(),
         program_data: program_data_dir(),
@@ -988,6 +1067,7 @@ fn scan_all_sources(
         let ctx = &ctx;
         let handles: Vec<(Source, _)> = STORES
             .iter()
+            .filter(|d| enabled.contains(&d.source))
             .map(|d| {
                 let scan = d.scan;
                 (d.source, s.spawn(move || scan(ctx)))
@@ -1038,6 +1118,7 @@ fn epic_manifests_dir() -> std::path::PathBuf {
 #[cfg(not(windows))]
 fn scan_all_sources(
     _watch_folders: Vec<std::path::PathBuf>,
+    _enabled: &std::collections::HashSet<Source>,
 ) -> Vec<(Source, CoreResult<Vec<Game>>)> {
     Vec::new()
 }
@@ -1069,6 +1150,29 @@ mod tests {
     #[test]
     fn ping_ok_returns_pong() {
         assert_eq!(ping(false).unwrap(), "pong");
+    }
+
+    #[test]
+    fn store_enabled_key_recognizes_valid_store_keys() {
+        assert!(is_store_enabled_key("store.xbox.enabled"));
+        assert!(is_store_enabled_key("store.steam.enabled"));
+        assert!(!is_store_enabled_key("store.nope.enabled")); // unknown source
+        assert!(!is_store_enabled_key("store.xbox")); // wrong suffix
+        assert!(!is_store_enabled_key("xbox.enabled")); // wrong prefix
+    }
+
+    #[test]
+    fn enabled_sources_defaults_all_on_and_respects_disable() {
+        let db = crate::db::Db::open_in_memory().unwrap();
+        // Default (no settings): every registered store is enabled.
+        assert_eq!(enabled_sources(&db).len(), scan::store::STORES.len());
+        // Disabling one excludes only it.
+        db.set_setting(&store_enabled_key(Source::Xbox), "false")
+            .unwrap();
+        let on = enabled_sources(&db);
+        assert!(!on.contains(&Source::Xbox));
+        assert!(on.contains(&Source::Steam));
+        assert_eq!(on.len(), scan::store::STORES.len() - 1);
     }
 
     #[test]

@@ -6,7 +6,7 @@
 
 use crate::error::CoreResult;
 use crate::models::{Game, Source};
-use crate::os::{FileSystem, Registry};
+use crate::os::{Appx, FileSystem, Registry};
 use std::path::PathBuf;
 
 /// How a store's games are launched (dispatched in `commands::launch_game`).
@@ -18,6 +18,8 @@ pub enum LaunchStrategy {
     Exe,
     /// Protocol if the store client is installed, else exe (gog).
     Hybrid,
+    /// `shell:AppsFolder\<AUMID>` for packaged Store/Xbox apps (xbox).
+    Shell,
 }
 
 /// Shared, thread-safe scan dependencies, assembled once per scan. The `+ Sync`
@@ -25,6 +27,7 @@ pub enum LaunchStrategy {
 pub struct ScanCtx<'a> {
     pub registry: &'a (dyn Registry + Sync),
     pub fs: &'a (dyn FileSystem + Sync),
+    pub appx: &'a (dyn Appx + Sync),
     pub watch_folders: &'a [PathBuf],
     /// Resolved well-known directories (kept here so scanners stay path-pure).
     pub epic_dir: PathBuf,
@@ -72,10 +75,35 @@ pub static STORES: &[Descriptor] = &[
         launch: LaunchStrategy::Hybrid,
     },
     Descriptor {
+        source: Source::Xbox,
+        display: "Xbox",
+        color: "#107c10",
+        rank: 3,
+        scan: crate::scan::xbox::scan,
+        launch: LaunchStrategy::Shell,
+    },
+    Descriptor {
+        source: Source::Ubisoft,
+        display: "Ubisoft",
+        color: "#0070ff",
+        rank: 4,
+        scan: crate::scan::ubisoft::scan,
+        launch: LaunchStrategy::Protocol,
+    },
+    Descriptor {
+        source: Source::Ea,
+        display: "EA",
+        color: "#ff4747",
+        rank: 5,
+        scan: crate::scan::ea::scan,
+        launch: LaunchStrategy::Protocol,
+    },
+    Descriptor {
         source: Source::Local,
         display: "Local",
         color: "#0070d1",
-        rank: 3,
+        // Last: the catch-all fallback, outranked by every real store.
+        rank: 6,
         scan: |c| crate::scan::local::LocalScanner::new(c.fs).scan(c.watch_folders),
         launch: LaunchStrategy::Exe,
     },
@@ -102,7 +130,15 @@ mod tests {
     #[test]
     fn every_source_has_exactly_one_descriptor() {
         // Guards against adding a Source variant without registering its store.
-        for s in [Source::Steam, Source::Epic, Source::Local, Source::Gog] {
+        for s in [
+            Source::Steam,
+            Source::Epic,
+            Source::Local,
+            Source::Gog,
+            Source::Xbox,
+            Source::Ubisoft,
+            Source::Ea,
+        ] {
             let n = STORES.iter().filter(|d| d.source == s).count();
             assert_eq!(n, 1, "source {s:?} needs exactly one descriptor");
         }
